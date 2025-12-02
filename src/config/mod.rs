@@ -29,14 +29,36 @@ pub struct CustomFieldDefinition {
     pub enum_values: Vec<String>,
 }
 
+/// Default priority levels (3 = high/medium/low)
+fn default_priority_levels() -> u32 {
+    3
+}
+
 /// Centy configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentyConfig {
+    /// Number of priority levels (1-10). Default is 3 (high/medium/low).
+    /// - 2 levels: high, low
+    /// - 3 levels: high, medium, low
+    /// - 4 levels: critical, high, medium, low
+    /// - 5+ levels: P1, P2, P3, etc.
+    #[serde(default = "default_priority_levels")]
+    pub priority_levels: u32,
     #[serde(default)]
     pub custom_fields: Vec<CustomFieldDefinition>,
     #[serde(default)]
     pub defaults: HashMap<String, String>,
+}
+
+impl Default for CentyConfig {
+    fn default() -> Self {
+        Self {
+            priority_levels: default_priority_levels(),
+            custom_fields: Vec::new(),
+            defaults: HashMap::new(),
+        }
+    }
 }
 
 /// Read the configuration file

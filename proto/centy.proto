@@ -128,7 +128,7 @@ message CreateIssueRequest {
   string project_path = 1;
   string title = 2;
   string description = 3;
-  string priority = 4;  // "low", "medium", "high"
+  int32 priority = 4;   // 1 = highest priority, 0 = use default
   string status = 5;    // default: "open"
   map<string, string> custom_fields = 6;
 }
@@ -165,10 +165,11 @@ message Issue {
 
 message IssueMetadata {
   string status = 1;              // e.g., "open", "in-progress", "closed"
-  string priority = 2;            // "low", "medium", "high"
+  int32 priority = 2;             // 1 = highest priority, N = lowest
   string created_at = 3;          // ISO timestamp
   string updated_at = 4;          // ISO timestamp
   map<string, string> custom_fields = 5;
+  string priority_label = 6;      // Human-readable label (e.g., "high", "P1")
 }
 
 message GetIssueRequest {
@@ -181,7 +182,7 @@ message ListIssuesRequest {
 
   // Optional filters
   string status = 2;              // Filter by status (empty = all)
-  string priority = 3;            // Filter by priority (empty = all)
+  int32 priority = 3;             // Filter by priority (0 = all)
 }
 
 message ListIssuesResponse {
@@ -193,11 +194,11 @@ message UpdateIssueRequest {
   string project_path = 1;
   string issue_number = 2;
 
-  // Fields to update (empty string = don't update)
+  // Fields to update (empty string = don't update, 0 = don't update priority)
   string title = 3;
   string description = 4;
   string status = 5;
-  string priority = 6;
+  int32 priority = 6;             // 0 = don't update, otherwise 1-N
   map<string, string> custom_fields = 7;
 }
 
@@ -263,6 +264,7 @@ message GetConfigRequest {
 message Config {
   repeated CustomFieldDefinition custom_fields = 1;
   map<string, string> defaults = 2;
+  int32 priority_levels = 3;      // Number of priority levels (default: 3)
 }
 
 message CustomFieldDefinition {

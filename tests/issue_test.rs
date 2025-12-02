@@ -15,11 +15,11 @@ async fn test_create_issue_success() {
     // Initialize centy first
     init_centy_project(project_path).await;
 
-    // Create an issue
+    // Create an issue with numeric priority (1 = highest)
     let options = CreateIssueOptions {
         title: "Test Issue".to_string(),
         description: "This is a test issue".to_string(),
-        priority: Some("high".to_string()),
+        priority: Some(1), // high priority
         status: Some("open".to_string()),
         custom_fields: HashMap::new(),
     };
@@ -120,8 +120,9 @@ async fn test_create_issue_default_priority_and_status() {
     create_issue(project_path, options).await.expect("Should create");
 
     // Get the issue and verify defaults
+    // Default priority with 3 levels (high/medium/low) is 2 (medium)
     let issue = get_issue(project_path, "0001").await.expect("Should get issue");
-    assert_eq!(issue.metadata.priority, "medium");
+    assert_eq!(issue.metadata.priority, 2); // medium
     assert_eq!(issue.metadata.status, "open");
 }
 
@@ -132,11 +133,11 @@ async fn test_get_issue_success() {
 
     init_centy_project(project_path).await;
 
-    // Create an issue
+    // Create an issue with numeric priority
     let options = CreateIssueOptions {
         title: "My Test Issue".to_string(),
         description: "Description here".to_string(),
-        priority: Some("high".to_string()),
+        priority: Some(1), // high
         status: Some("in-progress".to_string()),
         custom_fields: HashMap::new(),
     };
@@ -148,7 +149,7 @@ async fn test_get_issue_success() {
     assert_eq!(issue.issue_number, "0001");
     assert_eq!(issue.title, "My Test Issue");
     assert_eq!(issue.description, "Description here");
-    assert_eq!(issue.metadata.priority, "high");
+    assert_eq!(issue.metadata.priority, 1); // high
     assert_eq!(issue.metadata.status, "in-progress");
 }
 
@@ -259,12 +260,12 @@ async fn test_list_issues_filter_by_priority() {
 
     init_centy_project(project_path).await;
 
-    // Create issues with different priorities
+    // Create issues with different priorities (numeric)
     create_issue(
         project_path,
         CreateIssueOptions {
             title: "High Priority".to_string(),
-            priority: Some("high".to_string()),
+            priority: Some(1), // high
             ..Default::default()
         },
     )
@@ -275,15 +276,15 @@ async fn test_list_issues_filter_by_priority() {
         project_path,
         CreateIssueOptions {
             title: "Low Priority".to_string(),
-            priority: Some("low".to_string()),
+            priority: Some(3), // low
             ..Default::default()
         },
     )
     .await
     .unwrap();
 
-    // Filter by priority
-    let high_issues = list_issues(project_path, None, Some("high"))
+    // Filter by priority (numeric)
+    let high_issues = list_issues(project_path, None, Some(1))
         .await
         .expect("Should list");
     assert_eq!(high_issues.len(), 1);
@@ -371,7 +372,7 @@ async fn test_update_issue_preserves_unchanged_fields() {
         CreateIssueOptions {
             title: "Original".to_string(),
             description: "Original description".to_string(),
-            priority: Some("high".to_string()),
+            priority: Some(1), // high
             status: Some("open".to_string()),
             ..Default::default()
         },
@@ -394,7 +395,7 @@ async fn test_update_issue_preserves_unchanged_fields() {
     // Other fields should be preserved
     assert_eq!(result.issue.title, "New Title");
     assert_eq!(result.issue.description, "Original description");
-    assert_eq!(result.issue.metadata.priority, "high");
+    assert_eq!(result.issue.metadata.priority, 1); // high
     assert_eq!(result.issue.metadata.status, "open");
 }
 
@@ -596,4 +597,57 @@ async fn test_update_issue_custom_fields() {
         result.issue.metadata.custom_fields.get("reviewer"),
         Some(&"charlie".to_string())
     );
+}
+
+#[tokio::test]
+async fn test_create_issue_validates_priority_range() {
+    let temp_dir = create_test_dir();
+    let project_path = temp_dir.path();
+
+    init_centy_project(project_path).await;
+
+    // Try to create issue with out-of-range priority (default is 3 levels)
+    let options = CreateIssueOptions {
+        title: "Invalid Priority".to_string(),
+        priority: Some(5), // Invalid - max is 3
+        ..Default::default()
+    };
+
+    let result = create_issue(project_path, options).await;
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), IssueError::InvalidPriority(_)));
+}
+
+#[tokio::test]
+async fn test_update_issue_priority() {
+    let temp_dir = create_test_dir();
+    let project_path = temp_dir.path();
+
+    init_centy_project(project_path).await;
+
+    // Create with low priority
+    create_issue(
+        project_path,
+        CreateIssueOptions {
+            title: "Test".to_string(),
+            priority: Some(3), // low
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Update to high priority
+    let result = update_issue(
+        project_path,
+        "0001",
+        UpdateIssueOptions {
+            priority: Some(1), // high
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("Should update");
+
+    assert_eq!(result.issue.metadata.priority, 1);
 }

@@ -5,7 +5,7 @@ use crate::docs::{
 };
 use crate::issue::{
     create_issue, delete_issue, get_issue, list_issues, update_issue,
-    CreateIssueOptions, UpdateIssueOptions,
+    CreateIssueOptions, UpdateIssueOptions, priority_label,
 };
 use crate::manifest::{read_manifest, ManagedFileType as InternalFileType};
 use crate::reconciliation::{
@@ -134,10 +134,11 @@ impl CentyDaemon for CentyDaemonService {
         let req = request.into_inner();
         let project_path = Path::new(&req.project_path);
 
+        // Convert int32 priority: 0 means use default, otherwise use the value
         let options = CreateIssueOptions {
             title: req.title,
             description: req.description,
-            priority: if req.priority.is_empty() { None } else { Some(req.priority) },
+            priority: if req.priority == 0 { None } else { Some(req.priority as u32) },
             status: if req.status.is_empty() { None } else { Some(req.status) },
             custom_fields: req.custom_fields,
         };
@@ -167,8 +168,12 @@ impl CentyDaemon for CentyDaemonService {
         let req = request.into_inner();
         let project_path = Path::new(&req.project_path);
 
+        // Read config for priority_levels (for label generation)
+        let config = read_config(project_path).await.ok().flatten();
+        let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
+
         match get_issue(project_path, &req.issue_number).await {
-            Ok(issue) => Ok(Response::new(issue_to_proto(&issue))),
+            Ok(issue) => Ok(Response::new(issue_to_proto(&issue, priority_levels))),
             Err(e) => Err(Status::not_found(e.to_string())),
         }
     }
@@ -180,14 +185,19 @@ impl CentyDaemon for CentyDaemonService {
         let req = request.into_inner();
         let project_path = Path::new(&req.project_path);
 
+        // Read config for priority_levels (for label generation)
+        let config = read_config(project_path).await.ok().flatten();
+        let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
+
         let status_filter = if req.status.is_empty() { None } else { Some(req.status.as_str()) };
-        let priority_filter = if req.priority.is_empty() { None } else { Some(req.priority.as_str()) };
+        // Convert int32 priority filter: 0 means no filter
+        let priority_filter = if req.priority == 0 { None } else { Some(req.priority as u32) };
 
         match list_issues(project_path, status_filter, priority_filter).await {
             Ok(issues) => {
                 let total_count = issues.len() as i32;
                 Ok(Response::new(ListIssuesResponse {
-                    issues: issues.into_iter().map(|i| issue_to_proto(&i)).collect(),
+                    issues: issues.into_iter().map(|i| issue_to_proto(&i, priority_levels)).collect(),
                     total_count,
                 }))
             }
@@ -202,11 +212,16 @@ impl CentyDaemon for CentyDaemonService {
         let req = request.into_inner();
         let project_path = Path::new(&req.project_path);
 
+        // Read config for priority_levels (for label generation)
+        let config = read_config(project_path).await.ok().flatten();
+        let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
+
+        // Convert int32 priority: 0 means don't update, otherwise use the value
         let options = UpdateIssueOptions {
             title: if req.title.is_empty() { None } else { Some(req.title) },
             description: if req.description.is_empty() { None } else { Some(req.description) },
             status: if req.status.is_empty() { None } else { Some(req.status) },
-            priority: if req.priority.is_empty() { None } else { Some(req.priority) },
+            priority: if req.priority == 0 { None } else { Some(req.priority as u32) },
             custom_fields: req.custom_fields,
         };
 
@@ -214,7 +229,7 @@ impl CentyDaemon for CentyDaemonService {
             Ok(result) => Ok(Response::new(UpdateIssueResponse {
                 success: true,
                 error: String::new(),
-                issue: Some(issue_to_proto(&result.issue)),
+                issue: Some(issue_to_proto(&result.issue, priority_levels)),
                 manifest: Some(manifest_to_proto(&result.manifest)),
             })),
             Err(e) => Ok(Response::new(UpdateIssueResponse {
@@ -287,6 +302,7 @@ impl CentyDaemon for CentyDaemonService {
             Ok(None) => Ok(Response::new(Config {
                 custom_fields: vec![],
                 defaults: std::collections::HashMap::new(),
+                priority_levels: 3, // Default
             })),
             Err(e) => Err(Status::internal(e.to_string())),
         }
@@ -481,20 +497,22 @@ fn config_to_proto(config: &CentyConfig) -> Config {
             })
             .collect(),
         defaults: config.defaults.clone(),
+        priority_levels: config.priority_levels as i32,
     }
 }
 
-fn issue_to_proto(issue: &crate::issue::Issue) -> Issue {
+fn issue_to_proto(issue: &crate::issue::Issue, priority_levels: u32) -> Issue {
     Issue {
         issue_number: issue.issue_number.clone(),
         title: issue.title.clone(),
         description: issue.description.clone(),
         metadata: Some(IssueMetadata {
             status: issue.metadata.status.clone(),
-            priority: issue.metadata.priority.clone(),
+            priority: issue.metadata.priority as i32,
             created_at: issue.metadata.created_at.clone(),
             updated_at: issue.metadata.updated_at.clone(),
             custom_fields: issue.metadata.custom_fields.clone(),
+            priority_label: priority_label(issue.metadata.priority, priority_levels),
         }),
     }
 }

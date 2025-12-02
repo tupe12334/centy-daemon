@@ -1,9 +1,11 @@
+use crate::config::read_config;
 use crate::manifest::{
     add_file_to_manifest, create_managed_file, read_manifest, write_manifest, CentyManifest,
     ManagedFileType,
 };
 use crate::utils::{compute_hash, get_centy_path, now_iso};
 use super::metadata::IssueMetadata;
+use super::priority::{validate_priority, PriorityError};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -28,6 +30,9 @@ pub enum IssueCrudError {
 
     #[error("Invalid issue format: {0}")]
     InvalidIssueFormat(String),
+
+    #[error("Invalid priority: {0}")]
+    InvalidPriority(#[from] PriorityError),
 }
 
 /// Full issue data
@@ -43,7 +48,8 @@ pub struct Issue {
 #[derive(Debug, Clone)]
 pub struct IssueMetadataFlat {
     pub status: String,
-    pub priority: String,
+    /// Priority as a number (1 = highest, N = lowest)
+    pub priority: u32,
     pub created_at: String,
     pub updated_at: String,
     pub custom_fields: HashMap<String, String>,
@@ -55,7 +61,8 @@ pub struct UpdateIssueOptions {
     pub title: Option<String>,
     pub description: Option<String>,
     pub status: Option<String>,
-    pub priority: Option<String>,
+    /// Priority as a number (1 = highest). None = don't update.
+    pub priority: Option<u32>,
     pub custom_fields: HashMap<String, String>,
 }
 
@@ -96,7 +103,7 @@ pub async fn get_issue(
 pub async fn list_issues(
     project_path: &Path,
     status_filter: Option<&str>,
-    priority_filter: Option<&str>,
+    priority_filter: Option<u32>,
 ) -> Result<Vec<Issue>, IssueCrudError> {
     // Check if centy is initialized
     read_manifest(project_path)
@@ -168,6 +175,10 @@ pub async fn update_issue(
         return Err(IssueCrudError::IssueNotFound(issue_number.to_string()));
     }
 
+    // Read config for priority_levels validation
+    let config = read_config(project_path).await.ok().flatten();
+    let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
+
     // Read current issue
     let current = read_issue_from_disk(&issue_path, issue_number).await?;
 
@@ -175,7 +186,15 @@ pub async fn update_issue(
     let new_title = options.title.unwrap_or(current.title);
     let new_description = options.description.unwrap_or(current.description);
     let new_status = options.status.unwrap_or(current.metadata.status);
-    let new_priority = options.priority.unwrap_or(current.metadata.priority);
+
+    // Validate and apply priority update
+    let new_priority = match options.priority {
+        Some(p) => {
+            validate_priority(p, priority_levels)?;
+            p
+        }
+        None => current.metadata.priority,
+    };
 
     // Merge custom fields
     let mut new_custom_fields = current.metadata.custom_fields;
@@ -186,7 +205,7 @@ pub async fn update_issue(
     // Create updated metadata
     let updated_metadata = IssueMetadata {
         status: new_status.clone(),
-        priority: new_priority.clone(),
+        priority: new_priority,
         created_at: current.metadata.created_at.clone(),
         updated_at: now_iso(),
         custom_fields: new_custom_fields
@@ -291,7 +310,7 @@ async fn read_issue_from_disk(issue_path: &Path, issue_number: &str) -> Result<I
     let issue_md = fs::read_to_string(&issue_md_path).await?;
     let (title, description) = parse_issue_md(&issue_md);
 
-    // Read metadata
+    // Read metadata (serde will auto-migrate string priorities to numbers)
     let metadata_content = fs::read_to_string(&metadata_path).await?;
     let metadata: IssueMetadata = serde_json::from_str(&metadata_content)?;
 

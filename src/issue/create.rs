@@ -5,6 +5,7 @@ use crate::manifest::{
 };
 use crate::utils::{compute_hash, get_centy_path};
 use super::metadata::IssueMetadata;
+use super::priority::{default_priority, validate_priority, PriorityError};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -26,6 +27,9 @@ pub enum IssueError {
 
     #[error("Title is required")]
     TitleRequired,
+
+    #[error("Invalid priority: {0}")]
+    InvalidPriority(#[from] PriorityError),
 }
 
 /// Options for creating an issue
@@ -33,7 +37,8 @@ pub enum IssueError {
 pub struct CreateIssueOptions {
     pub title: String,
     pub description: String,
-    pub priority: Option<String>,
+    /// Priority as a number (1 = highest). None = use default.
+    pub priority: Option<u32>,
     pub status: Option<String>,
     pub custom_fields: HashMap<String, String>,
 }
@@ -72,17 +77,27 @@ pub async fn create_issue(
     // Get next issue number
     let issue_number = get_next_issue_number(&issues_path).await?;
 
-    // Read config for defaults
+    // Read config for defaults and priority_levels
     let config = read_config(project_path).await.ok().flatten();
+    let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
 
-    // Determine priority and status
-    let priority = options.priority.unwrap_or_else(|| {
-        config
-            .as_ref()
-            .and_then(|c| c.defaults.get("priority").cloned())
-            .unwrap_or_else(|| "medium".to_string())
-    });
+    // Determine priority
+    let priority = match options.priority {
+        Some(p) => {
+            validate_priority(p, priority_levels)?;
+            p
+        }
+        None => {
+            // Try config defaults first, then use calculated default
+            config
+                .as_ref()
+                .and_then(|c| c.defaults.get("priority"))
+                .and_then(|p| p.parse::<u32>().ok())
+                .unwrap_or_else(|| default_priority(priority_levels))
+        }
+    };
 
+    // Determine status
     let status = options.status.unwrap_or_else(|| {
         config
             .as_ref()
