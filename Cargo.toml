@@ -10,7 +10,12 @@ license = "MIT"
 # gRPC
 tonic = "0.12"
 tonic-reflection = "0.12"
+tonic-web = "0.12"
 prost = "0.13"
+
+# HTTP/CORS
+tower-http = { version = "0.5", features = ["cors"] }
+http = "1"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

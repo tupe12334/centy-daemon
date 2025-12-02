@@ -1,4 +1,8 @@
 use crate::config::{read_config, CentyConfig};
+use crate::docs::{
+    create_doc, delete_doc, get_doc, list_docs, update_doc,
+    CreateDocOptions, UpdateDocOptions,
+};
 use crate::issue::{
     create_issue, delete_issue, get_issue, list_issues, update_issue,
     CreateIssueOptions, UpdateIssueOptions,
@@ -309,6 +313,121 @@ impl CentyDaemon for CentyDaemonService {
             centy_path: centy_path_str,
         }))
     }
+
+    // ============ Doc RPCs ============
+
+    async fn create_doc(
+        &self,
+        request: Request<CreateDocRequest>,
+    ) -> Result<Response<CreateDocResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        let options = CreateDocOptions {
+            title: req.title,
+            content: req.content,
+            slug: if req.slug.is_empty() { None } else { Some(req.slug) },
+        };
+
+        match create_doc(project_path, options).await {
+            Ok(result) => Ok(Response::new(CreateDocResponse {
+                success: true,
+                error: String::new(),
+                slug: result.slug,
+                created_file: result.created_file,
+                manifest: Some(manifest_to_proto(&result.manifest)),
+            })),
+            Err(e) => Ok(Response::new(CreateDocResponse {
+                success: false,
+                error: e.to_string(),
+                slug: String::new(),
+                created_file: String::new(),
+                manifest: None,
+            })),
+        }
+    }
+
+    async fn get_doc(
+        &self,
+        request: Request<GetDocRequest>,
+    ) -> Result<Response<Doc>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        match get_doc(project_path, &req.slug).await {
+            Ok(doc) => Ok(Response::new(doc_to_proto(&doc))),
+            Err(e) => Err(Status::not_found(e.to_string())),
+        }
+    }
+
+    async fn list_docs(
+        &self,
+        request: Request<ListDocsRequest>,
+    ) -> Result<Response<ListDocsResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        match list_docs(project_path).await {
+            Ok(docs) => {
+                let total_count = docs.len() as i32;
+                Ok(Response::new(ListDocsResponse {
+                    docs: docs.into_iter().map(|d| doc_to_proto(&d)).collect(),
+                    total_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+
+    async fn update_doc(
+        &self,
+        request: Request<UpdateDocRequest>,
+    ) -> Result<Response<UpdateDocResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        let options = UpdateDocOptions {
+            title: if req.title.is_empty() { None } else { Some(req.title) },
+            content: if req.content.is_empty() { None } else { Some(req.content) },
+            new_slug: if req.new_slug.is_empty() { None } else { Some(req.new_slug) },
+        };
+
+        match update_doc(project_path, &req.slug, options).await {
+            Ok(result) => Ok(Response::new(UpdateDocResponse {
+                success: true,
+                error: String::new(),
+                doc: Some(doc_to_proto(&result.doc)),
+                manifest: Some(manifest_to_proto(&result.manifest)),
+            })),
+            Err(e) => Ok(Response::new(UpdateDocResponse {
+                success: false,
+                error: e.to_string(),
+                doc: None,
+                manifest: None,
+            })),
+        }
+    }
+
+    async fn delete_doc(
+        &self,
+        request: Request<DeleteDocRequest>,
+    ) -> Result<Response<DeleteDocResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        match delete_doc(project_path, &req.slug).await {
+            Ok(result) => Ok(Response::new(DeleteDocResponse {
+                success: true,
+                error: String::new(),
+                manifest: Some(manifest_to_proto(&result.manifest)),
+            })),
+            Err(e) => Ok(Response::new(DeleteDocResponse {
+                success: false,
+                error: e.to_string(),
+                manifest: None,
+            })),
+        }
+    }
 }
 
 // Helper functions for converting internal types to proto types
@@ -376,6 +495,18 @@ fn issue_to_proto(issue: &crate::issue::Issue) -> Issue {
             created_at: issue.metadata.created_at.clone(),
             updated_at: issue.metadata.updated_at.clone(),
             custom_fields: issue.metadata.custom_fields.clone(),
+        }),
+    }
+}
+
+fn doc_to_proto(doc: &crate::docs::Doc) -> Doc {
+    Doc {
+        slug: doc.slug.clone(),
+        title: doc.title.clone(),
+        content: doc.content.clone(),
+        metadata: Some(DocMetadata {
+            created_at: doc.metadata.created_at.clone(),
+            updated_at: doc.metadata.updated_at.clone(),
         }),
     }
 }

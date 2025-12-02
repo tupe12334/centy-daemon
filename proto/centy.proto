@@ -39,6 +39,23 @@ service CentyDaemon {
 
   // Check if centy is initialized in a directory
   rpc IsInitialized(IsInitializedRequest) returns (IsInitializedResponse);
+
+  // ============ Doc RPCs ============
+
+  // Create a new documentation file
+  rpc CreateDoc(CreateDocRequest) returns (CreateDocResponse);
+
+  // Get a single doc by slug
+  rpc GetDoc(GetDocRequest) returns (Doc);
+
+  // List all docs
+  rpc ListDocs(ListDocsRequest) returns (ListDocsResponse);
+
+  // Update an existing doc
+  rpc UpdateDoc(UpdateDocRequest) returns (UpdateDocResponse);
+
+  // Delete a doc
+  rpc DeleteDoc(DeleteDocRequest) returns (DeleteDocResponse);
 }
 
 // ============ Init Messages ============
@@ -265,4 +282,76 @@ message IsInitializedRequest {
 message IsInitializedResponse {
   bool initialized = 1;
   string centy_path = 2;  // Full path to .centy folder if initialized
+}
+
+// ============ Doc Messages ============
+
+message CreateDocRequest {
+  string project_path = 1;
+  string title = 2;               // Doc title (used to generate slug)
+  string content = 3;             // Markdown content
+  string slug = 4;                // Optional custom slug (auto-generated from title if empty)
+}
+
+message CreateDocResponse {
+  bool success = 1;
+  string error = 2;
+  string slug = 3;                // The created doc slug
+  string created_file = 4;        // Path to created file
+  Manifest manifest = 5;
+}
+
+message GetDocRequest {
+  string project_path = 1;
+  string slug = 2;                // e.g., "getting-started"
+}
+
+message ListDocsRequest {
+  string project_path = 1;
+}
+
+message ListDocsResponse {
+  repeated Doc docs = 1;
+  int32 total_count = 2;
+}
+
+// Doc represents a documentation file
+message Doc {
+  string slug = 1;                // e.g., "getting-started"
+  string title = 2;
+  string content = 3;             // Full markdown content
+  DocMetadata metadata = 4;
+}
+
+message DocMetadata {
+  string created_at = 1;          // ISO timestamp
+  string updated_at = 2;          // ISO timestamp
+}
+
+message UpdateDocRequest {
+  string project_path = 1;
+  string slug = 2;
+
+  // Fields to update (empty string = don't update)
+  string title = 3;
+  string content = 4;
+  string new_slug = 5;            // Rename the doc (empty = keep current slug)
+}
+
+message UpdateDocResponse {
+  bool success = 1;
+  string error = 2;
+  Doc doc = 3;                    // The updated doc
+  Manifest manifest = 4;
+}
+
+message DeleteDocRequest {
+  string project_path = 1;
+  string slug = 2;
+}
+
+message DeleteDocResponse {
+  bool success = 1;
+  string error = 2;
+  Manifest manifest = 3;
 }
