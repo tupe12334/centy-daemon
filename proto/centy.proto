@@ -1,0 +1,192 @@
+syntax = "proto3";
+
+package centy;
+
+// CentyDaemon service - manages .centy folder operations
+service CentyDaemon {
+  // Initialize a .centy folder in the specified directory
+  rpc Init(InitRequest) returns (InitResponse);
+
+  // Get reconciliation plan without executing it
+  rpc GetReconciliationPlan(GetReconciliationPlanRequest) returns (ReconciliationPlan);
+
+  // Execute reconciliation with user decisions
+  rpc ExecuteReconciliation(ExecuteReconciliationRequest) returns (InitResponse);
+
+  // Create a new issue
+  rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
+
+  // Get the next issue number
+  rpc GetNextIssueNumber(GetNextIssueNumberRequest) returns (GetNextIssueNumberResponse);
+
+  // Read the manifest
+  rpc GetManifest(GetManifestRequest) returns (Manifest);
+
+  // Read configuration
+  rpc GetConfig(GetConfigRequest) returns (Config);
+
+  // Check if centy is initialized in a directory
+  rpc IsInitialized(IsInitializedRequest) returns (IsInitializedResponse);
+}
+
+// ============ Init Messages ============
+
+message InitRequest {
+  // The project directory path where .centy should be initialized
+  string project_path = 1;
+
+  // If true, skip prompts and use defaults (create all, restore all, reset none)
+  bool force = 2;
+
+  // Decisions for files that need user input (only used when force=false)
+  ReconciliationDecisions decisions = 3;
+}
+
+message InitResponse {
+  bool success = 1;
+  string error = 2;
+
+  // Summary of what was done
+  repeated string created = 3;
+  repeated string restored = 4;
+  repeated string reset = 5;
+  repeated string skipped = 6;
+
+  // The updated manifest
+  Manifest manifest = 7;
+}
+
+message GetReconciliationPlanRequest {
+  string project_path = 1;
+}
+
+message ReconciliationPlan {
+  // Files that need to be created (not on disk, not in manifest)
+  repeated FileInfo to_create = 1;
+
+  // Files that were deleted but exist in manifest (can be restored)
+  repeated FileInfo to_restore = 2;
+
+  // Files that were modified from original (hash mismatch)
+  repeated FileInfo to_reset = 3;
+
+  // Files that are up to date
+  repeated FileInfo up_to_date = 4;
+
+  // User-created files (not managed by centy)
+  repeated FileInfo user_files = 5;
+
+  // Whether user decisions are needed
+  bool needs_decisions = 6;
+}
+
+message ExecuteReconciliationRequest {
+  string project_path = 1;
+  ReconciliationDecisions decisions = 2;
+}
+
+message ReconciliationDecisions {
+  // Paths of files to restore (from to_restore list)
+  repeated string restore = 1;
+
+  // Paths of files to reset (from to_reset list)
+  repeated string reset = 2;
+}
+
+// ============ Issue Messages ============
+
+message CreateIssueRequest {
+  string project_path = 1;
+  string title = 2;
+  string description = 3;
+  string priority = 4;  // "low", "medium", "high"
+  string status = 5;    // default: "open"
+  map<string, string> custom_fields = 6;
+}
+
+message CreateIssueResponse {
+  bool success = 1;
+  string error = 2;
+
+  // The created issue number (e.g., "0001")
+  string issue_number = 3;
+
+  // Paths to created files
+  repeated string created_files = 4;
+
+  // The updated manifest
+  Manifest manifest = 5;
+}
+
+message GetNextIssueNumberRequest {
+  string project_path = 1;
+}
+
+message GetNextIssueNumberResponse {
+  string issue_number = 1;
+}
+
+// ============ Manifest Messages ============
+
+message GetManifestRequest {
+  string project_path = 1;
+}
+
+message Manifest {
+  int32 schema_version = 1;
+  string centy_version = 2;
+  string created_at = 3;
+  string updated_at = 4;
+  repeated ManagedFile managed_files = 5;
+}
+
+message ManagedFile {
+  string path = 1;
+  string hash = 2;
+  string version = 3;
+  string created_at = 4;
+  FileType file_type = 5;
+}
+
+enum FileType {
+  FILE_TYPE_UNSPECIFIED = 0;
+  FILE_TYPE_FILE = 1;
+  FILE_TYPE_DIRECTORY = 2;
+}
+
+message FileInfo {
+  string path = 1;
+  FileType file_type = 2;
+  string hash = 3;
+  string content_preview = 4;  // For display purposes
+}
+
+// ============ Config Messages ============
+
+message GetConfigRequest {
+  string project_path = 1;
+}
+
+message Config {
+  repeated CustomFieldDefinition custom_fields = 1;
+  map<string, string> defaults = 2;
+}
+
+message CustomFieldDefinition {
+  string name = 1;
+  string field_type = 2;  // "string", "number", "boolean", "enum"
+  bool required = 3;
+  string default_value = 4;
+  repeated string enum_values = 5;  // For enum type
+}
+
+// ============ Utility Messages ============
+
+message IsInitializedRequest {
+  string project_path = 1;
+}
+
+message IsInitializedResponse {
+  bool initialized = 1;
+  string centy_path = 2;  // Full path to .centy folder if initialized
+}
