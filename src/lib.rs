@@ -3,7 +3,9 @@ pub mod docs;
 pub mod issue;
 pub mod manifest;
 pub mod reconciliation;
+pub mod registry;
 pub mod server;
+pub mod template;
 pub mod utils;
 
 // Re-export commonly used types
@@ -23,4 +25,9 @@ pub use reconciliation::{
     build_reconciliation_plan, execute_reconciliation, ReconciliationDecisions, ReconciliationPlan,
     ReconciliationResult,
 };
+pub use registry::{
+    get_project_info, list_projects, track_project, untrack_project, ProjectInfo, ProjectRegistry,
+    RegistryError, TrackedProject,
+};
 pub use server::CentyDaemonService;
+pub use template::{DocTemplateContext, IssueTemplateContext, TemplateEngine, TemplateError, TemplateType};

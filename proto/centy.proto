@@ -56,6 +56,20 @@ service CentyDaemon {
 
   // Delete a doc
   rpc DeleteDoc(DeleteDocRequest) returns (DeleteDocResponse);
+
+  // ============ Project Registry RPCs ============
+
+  // List all tracked projects
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+
+  // Manually register a project for tracking
+  rpc RegisterProject(RegisterProjectRequest) returns (RegisterProjectResponse);
+
+  // Remove a project from tracking
+  rpc UntrackProject(UntrackProjectRequest) returns (UntrackProjectResponse);
+
+  // Get info about a specific project
+  rpc GetProjectInfo(GetProjectInfoRequest) returns (GetProjectInfoResponse);
 }
 
 // ============ Init Messages ============
@@ -131,6 +145,7 @@ message CreateIssueRequest {
   int32 priority = 4;   // 1 = highest priority, 0 = use default
   string status = 5;    // default: "open"
   map<string, string> custom_fields = 6;
+  string template = 7;  // Optional template name (without .md extension)
 }
 
 message CreateIssueResponse {
@@ -293,6 +308,7 @@ message CreateDocRequest {
   string title = 2;               // Doc title (used to generate slug)
   string content = 3;             // Markdown content
   string slug = 4;                // Optional custom slug (auto-generated from title if empty)
+  string template = 5;            // Optional template name (without .md extension)
 }
 
 message CreateDocResponse {
@@ -356,4 +372,54 @@ message DeleteDocResponse {
   bool success = 1;
   string error = 2;
   Manifest manifest = 3;
+}
+
+// ============ Project Registry Messages ============
+
+// Returned by API (enriched with live data from disk)
+message ProjectInfo {
+  string path = 1;                // Absolute path to project
+  string first_accessed = 2;      // ISO timestamp
+  string last_accessed = 3;       // ISO timestamp
+  uint32 issue_count = 4;         // Fetched live from .centy/issues/
+  uint32 doc_count = 5;           // Fetched live from .centy/docs/
+  bool initialized = 6;           // Fetched live (manifest exists)
+  string name = 7;                // Fetched live (directory name)
+}
+
+message ListProjectsRequest {
+  bool include_stale = 1;         // Include projects where path no longer exists
+}
+
+message ListProjectsResponse {
+  repeated ProjectInfo projects = 1;
+  int32 total_count = 2;
+}
+
+message RegisterProjectRequest {
+  string project_path = 1;        // Path to register
+}
+
+message RegisterProjectResponse {
+  bool success = 1;
+  string error = 2;
+  ProjectInfo project = 3;        // The registered project info
+}
+
+message UntrackProjectRequest {
+  string project_path = 1;
+}
+
+message UntrackProjectResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message GetProjectInfoRequest {
+  string project_path = 1;
+}
+
+message GetProjectInfoResponse {
+  bool found = 1;
+  ProjectInfo project = 2;
 }

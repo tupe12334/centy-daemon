@@ -38,6 +38,9 @@ walkdir = "2"
 thiserror = "1"
 anyhow = "1"
 
+# Template engine
+handlebars = "6"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

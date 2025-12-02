@@ -3,7 +3,9 @@ mod docs;
 mod issue;
 mod manifest;
 mod reconciliation;
+mod registry;
 mod server;
+mod template;
 mod utils;
 
 use http::header::{ACCEPT, CONTENT_TYPE};

@@ -20,6 +20,7 @@ async fn test_create_doc_success() {
             title: "Getting Started".to_string(),
             content: "Welcome to our project!".to_string(),
             slug: None,
+            ..Default::default()
         },
     )
     .await
@@ -45,6 +46,7 @@ async fn test_create_doc_with_custom_slug() {
             title: "Getting Started".to_string(),
             content: "Content here".to_string(),
             slug: Some("quickstart".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -65,6 +67,7 @@ async fn test_create_doc_empty_title_fails() {
             title: "   ".to_string(),
             content: "Content".to_string(),
             slug: None,
+            ..Default::default()
         },
     )
     .await;
@@ -86,6 +89,7 @@ async fn test_create_doc_duplicate_slug_fails() {
             title: "Test Doc".to_string(),
             content: "Content".to_string(),
             slug: Some("test-doc".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -98,6 +102,7 @@ async fn test_create_doc_duplicate_slug_fails() {
             title: "Another Doc".to_string(),
             content: "Content".to_string(),
             slug: Some("test-doc".to_string()),
+            ..Default::default()
         },
     )
     .await;
@@ -118,6 +123,7 @@ async fn test_create_doc_not_initialized_fails() {
             title: "Test".to_string(),
             content: "Content".to_string(),
             slug: None,
+            ..Default::default()
         },
     )
     .await;
@@ -141,6 +147,7 @@ async fn test_get_doc_success() {
             title: "API Reference".to_string(),
             content: "This is the API documentation.".to_string(),
             slug: Some("api-reference".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -196,6 +203,7 @@ async fn test_list_docs_multiple() {
             title: "Zebra Doc".to_string(),
             content: "Z content".to_string(),
             slug: Some("zebra".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -207,6 +215,7 @@ async fn test_list_docs_multiple() {
             title: "Alpha Doc".to_string(),
             content: "A content".to_string(),
             slug: Some("alpha".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -218,6 +227,7 @@ async fn test_list_docs_multiple() {
             title: "Beta Doc".to_string(),
             content: "B content".to_string(),
             slug: Some("beta".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -246,6 +256,7 @@ async fn test_update_doc_title() {
             title: "Original Title".to_string(),
             content: "Original content".to_string(),
             slug: Some("test-doc".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -280,6 +291,7 @@ async fn test_update_doc_content() {
             title: "Test Doc".to_string(),
             content: "Original content".to_string(),
             slug: Some("test-doc".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -313,6 +325,7 @@ async fn test_update_doc_rename_slug() {
             title: "Test Doc".to_string(),
             content: "Content".to_string(),
             slug: Some("old-slug".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -377,6 +390,7 @@ async fn test_update_doc_rename_to_existing_slug_fails() {
             title: "Doc One".to_string(),
             content: "Content".to_string(),
             slug: Some("doc-one".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -388,6 +402,7 @@ async fn test_update_doc_rename_to_existing_slug_fails() {
             title: "Doc Two".to_string(),
             content: "Content".to_string(),
             slug: Some("doc-two".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -423,6 +438,7 @@ async fn test_delete_doc_success() {
             title: "To Delete".to_string(),
             content: "Content".to_string(),
             slug: Some("to-delete".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -469,6 +485,7 @@ async fn test_delete_doc_updates_manifest() {
             title: "Test Doc".to_string(),
             content: "Content".to_string(),
             slug: Some("test-doc".to_string()),
+            ..Default::default()
         },
     )
     .await
@@ -505,6 +522,7 @@ async fn test_slug_generation_from_title() {
             title: "How to Use the API v2".to_string(),
             content: "Content".to_string(),
             slug: None,
+            ..Default::default()
         },
     )
     .await
@@ -525,6 +543,7 @@ async fn test_slug_handles_special_characters() {
             title: "C++ & Rust: A Comparison!".to_string(),
             content: "Content".to_string(),
             slug: None,
+            ..Default::default()
         },
     )
     .await
@@ -551,6 +570,7 @@ async fn test_doc_preserves_metadata_on_update() {
             title: "Test Doc".to_string(),
             content: "Original".to_string(),
             slug: Some("test".to_string()),
+            ..Default::default()
         },
     )
     .await

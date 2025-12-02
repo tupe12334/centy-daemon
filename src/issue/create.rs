@@ -3,9 +3,10 @@ use crate::manifest::{
     add_file_to_manifest, create_managed_file, read_manifest, write_manifest, CentyManifest,
     ManagedFileType,
 };
+use crate::template::{IssueTemplateContext, TemplateEngine, TemplateError};
 use crate::utils::{compute_hash, get_centy_path};
 use super::metadata::IssueMetadata;
-use super::priority::{default_priority, validate_priority, PriorityError};
+use super::priority::{default_priority, priority_label, validate_priority, PriorityError};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -30,6 +31,9 @@ pub enum IssueError {
 
     #[error("Invalid priority: {0}")]
     InvalidPriority(#[from] PriorityError),
+
+    #[error("Template error: {0}")]
+    TemplateError(#[from] TemplateError),
 }
 
 /// Options for creating an issue
@@ -41,6 +45,8 @@ pub struct CreateIssueOptions {
     pub priority: Option<u32>,
     pub status: Option<String>,
     pub custom_fields: HashMap<String, String>,
+    /// Optional template name (without .md extension)
+    pub template: Option<String>,
 }
 
 /// Result of issue creation
@@ -126,10 +132,28 @@ pub async fn create_issue(
     }
 
     // Create metadata
-    let metadata = IssueMetadata::new(status, priority, custom_field_values);
+    let metadata = IssueMetadata::new(status.clone(), priority, custom_field_values);
 
     // Create issue content
-    let issue_md = generate_issue_md(&options.title, &options.description);
+    let issue_md = if let Some(ref template_name) = options.template {
+        // Use template engine
+        let template_engine = TemplateEngine::new();
+        let context = IssueTemplateContext {
+            title: options.title.clone(),
+            description: options.description.clone(),
+            priority,
+            priority_label: priority_label(priority, priority_levels),
+            status,
+            created_at: metadata.created_at.clone(),
+            custom_fields: options.custom_fields.clone(),
+        };
+        template_engine
+            .render_issue(project_path, template_name, &context)
+            .await?
+    } else {
+        // Use default format
+        generate_issue_md(&options.title, &options.description)
+    };
 
     // Write files
     let issue_folder = issues_path.join(&issue_number);

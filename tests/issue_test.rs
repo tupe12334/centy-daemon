@@ -22,6 +22,7 @@ async fn test_create_issue_success() {
         priority: Some(1), // high priority
         status: Some("open".to_string()),
         custom_fields: HashMap::new(),
+        ..Default::default()
     };
 
     let result = create_issue(project_path, options)
@@ -140,6 +141,7 @@ async fn test_get_issue_success() {
         priority: Some(1), // high
         status: Some("in-progress".to_string()),
         custom_fields: HashMap::new(),
+        ..Default::default()
     };
     create_issue(project_path, options).await.expect("Should create");
 

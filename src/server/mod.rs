@@ -1,15 +1,17 @@
 use crate::config::{read_config, CentyConfig};
 use crate::docs::{
-    create_doc, delete_doc, get_doc, list_docs, update_doc,
-    CreateDocOptions, UpdateDocOptions,
+    create_doc, delete_doc, get_doc, list_docs, update_doc, CreateDocOptions, UpdateDocOptions,
 };
 use crate::issue::{
-    create_issue, delete_issue, get_issue, list_issues, update_issue,
-    CreateIssueOptions, UpdateIssueOptions, priority_label,
+    create_issue, delete_issue, get_issue, list_issues, priority_label, update_issue,
+    CreateIssueOptions, UpdateIssueOptions,
 };
 use crate::manifest::{read_manifest, ManagedFileType as InternalFileType};
 use crate::reconciliation::{
     build_reconciliation_plan, execute_reconciliation, ReconciliationDecisions,
+};
+use crate::registry::{
+    get_project_info, list_projects, track_project_async, untrack_project, ProjectInfo,
 };
 use crate::utils::get_centy_path;
 use std::path::Path;
@@ -41,6 +43,7 @@ impl Default for CentyDaemonService {
 impl CentyDaemon for CentyDaemonService {
     async fn init(&self, request: Request<InitRequest>) -> Result<Response<InitResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         let decisions = req.decisions.map(|d| ReconciliationDecisions {
@@ -75,6 +78,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<GetReconciliationPlanRequest>,
     ) -> Result<Response<ReconciliationPlan>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match build_reconciliation_plan(project_path).await {
@@ -98,6 +102,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<ExecuteReconciliationRequest>,
     ) -> Result<Response<InitResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         let decisions = req.decisions.map(|d| ReconciliationDecisions {
@@ -132,6 +137,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<CreateIssueRequest>,
     ) -> Result<Response<CreateIssueResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         // Convert int32 priority: 0 means use default, otherwise use the value
@@ -141,6 +147,7 @@ impl CentyDaemon for CentyDaemonService {
             priority: if req.priority == 0 { None } else { Some(req.priority as u32) },
             status: if req.status.is_empty() { None } else { Some(req.status) },
             custom_fields: req.custom_fields,
+            template: if req.template.is_empty() { None } else { Some(req.template) },
         };
 
         match create_issue(project_path, options).await {
@@ -166,6 +173,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<GetIssueRequest>,
     ) -> Result<Response<Issue>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         // Read config for priority_levels (for label generation)
@@ -183,6 +191,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<ListIssuesRequest>,
     ) -> Result<Response<ListIssuesResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         // Read config for priority_levels (for label generation)
@@ -210,6 +219,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<UpdateIssueRequest>,
     ) -> Result<Response<UpdateIssueResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         // Read config for priority_levels (for label generation)
@@ -246,6 +256,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<DeleteIssueRequest>,
     ) -> Result<Response<DeleteIssueResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match delete_issue(project_path, &req.issue_number).await {
@@ -267,6 +278,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<GetNextIssueNumberRequest>,
     ) -> Result<Response<GetNextIssueNumberResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
         let issues_path = get_centy_path(project_path).join("issues");
 
@@ -281,6 +293,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<GetManifestRequest>,
     ) -> Result<Response<Manifest>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match read_manifest(project_path).await {
@@ -295,6 +308,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<GetConfigRequest>,
     ) -> Result<Response<Config>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match read_config(project_path).await {
@@ -313,6 +327,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<IsInitializedRequest>,
     ) -> Result<Response<IsInitializedResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
         let centy_path = get_centy_path(project_path);
         let manifest_path = centy_path.join(".centy-manifest.json");
@@ -337,12 +352,14 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<CreateDocRequest>,
     ) -> Result<Response<CreateDocResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         let options = CreateDocOptions {
             title: req.title,
             content: req.content,
             slug: if req.slug.is_empty() { None } else { Some(req.slug) },
+            template: if req.template.is_empty() { None } else { Some(req.template) },
         };
 
         match create_doc(project_path, options).await {
@@ -368,6 +385,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<GetDocRequest>,
     ) -> Result<Response<Doc>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match get_doc(project_path, &req.slug).await {
@@ -381,6 +399,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<ListDocsRequest>,
     ) -> Result<Response<ListDocsResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match list_docs(project_path).await {
@@ -400,6 +419,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<UpdateDocRequest>,
     ) -> Result<Response<UpdateDocResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         let options = UpdateDocOptions {
@@ -429,6 +449,7 @@ impl CentyDaemon for CentyDaemonService {
         request: Request<DeleteDocRequest>,
     ) -> Result<Response<DeleteDocResponse>, Status> {
         let req = request.into_inner();
+        track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
         match delete_doc(project_path, &req.slug).await {
@@ -442,6 +463,98 @@ impl CentyDaemon for CentyDaemonService {
                 error: e.to_string(),
                 manifest: None,
             })),
+        }
+    }
+
+    // ============ Project Registry RPCs ============
+
+    async fn list_projects(
+        &self,
+        request: Request<ListProjectsRequest>,
+    ) -> Result<Response<ListProjectsResponse>, Status> {
+        let req = request.into_inner();
+
+        match list_projects(req.include_stale).await {
+            Ok(projects) => {
+                let total_count = projects.len() as i32;
+                Ok(Response::new(ListProjectsResponse {
+                    projects: projects.into_iter().map(|p| project_info_to_proto(&p)).collect(),
+                    total_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+
+    async fn register_project(
+        &self,
+        request: Request<RegisterProjectRequest>,
+    ) -> Result<Response<RegisterProjectResponse>, Status> {
+        let req = request.into_inner();
+
+        // Track the project (this creates or updates the entry)
+        if let Err(e) = crate::registry::track_project(&req.project_path).await {
+            return Ok(Response::new(RegisterProjectResponse {
+                success: false,
+                error: e.to_string(),
+                project: None,
+            }));
+        }
+
+        // Get the project info
+        match get_project_info(&req.project_path).await {
+            Ok(Some(info)) => Ok(Response::new(RegisterProjectResponse {
+                success: true,
+                error: String::new(),
+                project: Some(project_info_to_proto(&info)),
+            })),
+            Ok(None) => Ok(Response::new(RegisterProjectResponse {
+                success: false,
+                error: "Failed to retrieve project after registration".to_string(),
+                project: None,
+            })),
+            Err(e) => Ok(Response::new(RegisterProjectResponse {
+                success: false,
+                error: e.to_string(),
+                project: None,
+            })),
+        }
+    }
+
+    async fn untrack_project(
+        &self,
+        request: Request<UntrackProjectRequest>,
+    ) -> Result<Response<UntrackProjectResponse>, Status> {
+        let req = request.into_inner();
+
+        match untrack_project(&req.project_path).await {
+            Ok(()) => Ok(Response::new(UntrackProjectResponse {
+                success: true,
+                error: String::new(),
+            })),
+            Err(e) => Ok(Response::new(UntrackProjectResponse {
+                success: false,
+                error: e.to_string(),
+            })),
+        }
+    }
+
+    async fn get_project_info(
+        &self,
+        request: Request<GetProjectInfoRequest>,
+    ) -> Result<Response<GetProjectInfoResponse>, Status> {
+        let req = request.into_inner();
+
+        match get_project_info(&req.project_path).await {
+            Ok(Some(info)) => Ok(Response::new(GetProjectInfoResponse {
+                found: true,
+                project: Some(project_info_to_proto(&info)),
+            })),
+            Ok(None) => Ok(Response::new(GetProjectInfoResponse {
+                found: false,
+                project: None,
+            })),
+            Err(e) => Err(Status::internal(e.to_string())),
         }
     }
 }
@@ -526,5 +639,17 @@ fn doc_to_proto(doc: &crate::docs::Doc) -> Doc {
             created_at: doc.metadata.created_at.clone(),
             updated_at: doc.metadata.updated_at.clone(),
         }),
+    }
+}
+
+fn project_info_to_proto(info: &ProjectInfo) -> proto::ProjectInfo {
+    proto::ProjectInfo {
+        path: info.path.clone(),
+        first_accessed: info.first_accessed.clone(),
+        last_accessed: info.last_accessed.clone(),
+        issue_count: info.issue_count,
+        doc_count: info.doc_count,
+        initialized: info.initialized,
+        name: info.name.clone().unwrap_or_default(),
     }
 }

@@ -2,6 +2,7 @@ use crate::manifest::{
     add_file_to_manifest, create_managed_file, read_manifest, write_manifest, CentyManifest,
     ManagedFileType,
 };
+use crate::template::{DocTemplateContext, TemplateEngine, TemplateError};
 use crate::utils::{compute_hash, get_centy_path, now_iso};
 use std::path::Path;
 use thiserror::Error;
@@ -32,6 +33,9 @@ pub enum DocError {
 
     #[error("Invalid slug: {0}")]
     InvalidSlug(String),
+
+    #[error("Template error: {0}")]
+    TemplateError(#[from] TemplateError),
 }
 
 /// Full doc data
@@ -73,6 +77,8 @@ pub struct CreateDocOptions {
     pub title: String,
     pub content: String,
     pub slug: Option<String>,
+    /// Optional template name (without .md extension)
+    pub template: Option<String>,
 }
 
 /// Result of doc creation
@@ -147,7 +153,23 @@ pub async fn create_doc(
     let metadata = DocMetadata::new();
 
     // Generate doc content with frontmatter
-    let doc_content = generate_doc_content(&options.title, &options.content, &metadata);
+    let doc_content = if let Some(ref template_name) = options.template {
+        // Use template engine
+        let template_engine = TemplateEngine::new();
+        let context = DocTemplateContext {
+            title: options.title.clone(),
+            content: options.content.clone(),
+            slug: slug.clone(),
+            created_at: metadata.created_at.clone(),
+            updated_at: metadata.updated_at.clone(),
+        };
+        template_engine
+            .render_doc(project_path, template_name, &context)
+            .await?
+    } else {
+        // Use default format
+        generate_doc_content(&options.title, &options.content, &metadata)
+    };
 
     // Write the doc file
     fs::write(&doc_path, &doc_content).await?;
