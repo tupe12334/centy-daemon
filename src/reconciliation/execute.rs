@@ -4,7 +4,7 @@ use crate::manifest::{
 };
 use crate::utils::{compute_hash, get_centy_path};
 use super::managed_files::get_managed_files;
-use super::plan::{build_reconciliation_plan, ReconciliationPlan};
+use super::plan::build_reconciliation_plan;
 use std::collections::HashSet;
 use std::path::Path;
 use thiserror::Error;

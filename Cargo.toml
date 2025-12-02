@@ -9,6 +9,7 @@ license = "MIT"
 [dependencies]
 # gRPC
 tonic = "0.12"
+tonic-reflection = "0.12"
 prost = "0.13"
 
 # Async runtime
@@ -38,6 +39,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 tonic-build = "0.12"
+protobuf-src = "2"
 
 [[bin]]
 name = "centy-daemon"

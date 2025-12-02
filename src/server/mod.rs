@@ -5,7 +5,6 @@ use crate::reconciliation::{
     build_reconciliation_plan, execute_reconciliation, ReconciliationDecisions,
 };
 use crate::utils::get_centy_path;
-use std::collections::HashSet;
 use std::path::Path;
 use tonic::{Request, Response, Status};
 
@@ -72,14 +71,17 @@ impl CentyDaemon for CentyDaemonService {
         let project_path = Path::new(&req.project_path);
 
         match build_reconciliation_plan(project_path).await {
-            Ok(plan) => Ok(Response::new(ReconciliationPlan {
-                to_create: plan.to_create.into_iter().map(file_info_to_proto).collect(),
-                to_restore: plan.to_restore.into_iter().map(file_info_to_proto).collect(),
-                to_reset: plan.to_reset.into_iter().map(file_info_to_proto).collect(),
-                up_to_date: plan.up_to_date.into_iter().map(file_info_to_proto).collect(),
-                user_files: plan.user_files.into_iter().map(file_info_to_proto).collect(),
-                needs_decisions: plan.needs_decisions(),
-            })),
+            Ok(plan) => {
+                let needs_decisions = plan.needs_decisions();
+                Ok(Response::new(ReconciliationPlan {
+                    to_create: plan.to_create.into_iter().map(file_info_to_proto).collect(),
+                    to_restore: plan.to_restore.into_iter().map(file_info_to_proto).collect(),
+                    to_reset: plan.to_reset.into_iter().map(file_info_to_proto).collect(),
+                    up_to_date: plan.up_to_date.into_iter().map(file_info_to_proto).collect(),
+                    user_files: plan.user_files.into_iter().map(file_info_to_proto).collect(),
+                    needs_decisions,
+                }))
+            },
             Err(e) => Err(Status::internal(e.to_string())),
         }
     }

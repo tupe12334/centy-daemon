@@ -4,7 +4,6 @@ use super::managed_files::get_managed_files;
 use std::collections::HashSet;
 use std::path::Path;
 use thiserror::Error;
-use tokio::fs;
 use walkdir::WalkDir;
 
 #[derive(Error, Debug)]
