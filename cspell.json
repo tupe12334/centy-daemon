@@ -1,4 +1,4 @@
 {
   "version": "0.2",
-  "words": ["centy", "chrono", "fullstorydev", "grpcui", "grpcurl", "nocapture", "parseable", "println", "prost", "protoc", "rustc", "serde", "thiserror", "walkdir", "tonic", "grpc"]
+  "words": ["centy", "chrono", "fullstorydev", "grpcui", "grpcurl", "nocapture", "parseable", "println", "prost", "protoc", "rustc", "serde", "thiserror", "walkdir", "tonic", "grpc", "USERPROFILE"]
 }
