@@ -1,4 +1,4 @@
 {
   "version": "0.2",
-  "words": ["centy", "protoc"]
+  "words": ["centy", "chrono", "prost", "protoc", "serde", "thiserror", "walkdir"]
 }
