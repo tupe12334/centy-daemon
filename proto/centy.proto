@@ -16,6 +16,18 @@ service CentyDaemon {
   // Create a new issue
   rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
 
+  // Get a single issue by number
+  rpc GetIssue(GetIssueRequest) returns (Issue);
+
+  // List all issues with optional filtering
+  rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
+
+  // Update an existing issue
+  rpc UpdateIssue(UpdateIssueRequest) returns (UpdateIssueResponse);
+
+  // Delete an issue
+  rpc DeleteIssue(DeleteIssueRequest) returns (DeleteIssueResponse);
+
   // Get the next issue number
   rpc GetNextIssueNumber(GetNextIssueNumberRequest) returns (GetNextIssueNumberResponse);
 
@@ -124,6 +136,70 @@ message GetNextIssueNumberRequest {
 
 message GetNextIssueNumberResponse {
   string issue_number = 1;
+}
+
+// Issue represents a full issue with all its data
+message Issue {
+  string issue_number = 1;        // e.g., "0001"
+  string title = 2;
+  string description = 3;
+  IssueMetadata metadata = 4;
+}
+
+message IssueMetadata {
+  string status = 1;              // e.g., "open", "in-progress", "closed"
+  string priority = 2;            // "low", "medium", "high"
+  string created_at = 3;          // ISO timestamp
+  string updated_at = 4;          // ISO timestamp
+  map<string, string> custom_fields = 5;
+}
+
+message GetIssueRequest {
+  string project_path = 1;
+  string issue_number = 2;        // e.g., "0001"
+}
+
+message ListIssuesRequest {
+  string project_path = 1;
+
+  // Optional filters
+  string status = 2;              // Filter by status (empty = all)
+  string priority = 3;            // Filter by priority (empty = all)
+}
+
+message ListIssuesResponse {
+  repeated Issue issues = 1;
+  int32 total_count = 2;
+}
+
+message UpdateIssueRequest {
+  string project_path = 1;
+  string issue_number = 2;
+
+  // Fields to update (empty string = don't update)
+  string title = 3;
+  string description = 4;
+  string status = 5;
+  string priority = 6;
+  map<string, string> custom_fields = 7;
+}
+
+message UpdateIssueResponse {
+  bool success = 1;
+  string error = 2;
+  Issue issue = 3;                // The updated issue
+  Manifest manifest = 4;
+}
+
+message DeleteIssueRequest {
+  string project_path = 1;
+  string issue_number = 2;
+}
+
+message DeleteIssueResponse {
+  bool success = 1;
+  string error = 2;
+  Manifest manifest = 3;          // Updated manifest after deletion
 }
 
 // ============ Manifest Messages ============

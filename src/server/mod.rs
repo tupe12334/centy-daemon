@@ -1,5 +1,8 @@
 use crate::config::{read_config, CentyConfig};
-use crate::issue::{create_issue, CreateIssueOptions};
+use crate::issue::{
+    create_issue, delete_issue, get_issue, list_issues, update_issue,
+    CreateIssueOptions, UpdateIssueOptions,
+};
 use crate::manifest::{read_manifest, ManagedFileType as InternalFileType};
 use crate::reconciliation::{
     build_reconciliation_plan, execute_reconciliation, ReconciliationDecisions,
@@ -153,6 +156,93 @@ impl CentyDaemon for CentyDaemonService {
         }
     }
 
+    async fn get_issue(
+        &self,
+        request: Request<GetIssueRequest>,
+    ) -> Result<Response<Issue>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        match get_issue(project_path, &req.issue_number).await {
+            Ok(issue) => Ok(Response::new(issue_to_proto(&issue))),
+            Err(e) => Err(Status::not_found(e.to_string())),
+        }
+    }
+
+    async fn list_issues(
+        &self,
+        request: Request<ListIssuesRequest>,
+    ) -> Result<Response<ListIssuesResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        let status_filter = if req.status.is_empty() { None } else { Some(req.status.as_str()) };
+        let priority_filter = if req.priority.is_empty() { None } else { Some(req.priority.as_str()) };
+
+        match list_issues(project_path, status_filter, priority_filter).await {
+            Ok(issues) => {
+                let total_count = issues.len() as i32;
+                Ok(Response::new(ListIssuesResponse {
+                    issues: issues.into_iter().map(|i| issue_to_proto(&i)).collect(),
+                    total_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+
+    async fn update_issue(
+        &self,
+        request: Request<UpdateIssueRequest>,
+    ) -> Result<Response<UpdateIssueResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        let options = UpdateIssueOptions {
+            title: if req.title.is_empty() { None } else { Some(req.title) },
+            description: if req.description.is_empty() { None } else { Some(req.description) },
+            status: if req.status.is_empty() { None } else { Some(req.status) },
+            priority: if req.priority.is_empty() { None } else { Some(req.priority) },
+            custom_fields: req.custom_fields,
+        };
+
+        match update_issue(project_path, &req.issue_number, options).await {
+            Ok(result) => Ok(Response::new(UpdateIssueResponse {
+                success: true,
+                error: String::new(),
+                issue: Some(issue_to_proto(&result.issue)),
+                manifest: Some(manifest_to_proto(&result.manifest)),
+            })),
+            Err(e) => Ok(Response::new(UpdateIssueResponse {
+                success: false,
+                error: e.to_string(),
+                issue: None,
+                manifest: None,
+            })),
+        }
+    }
+
+    async fn delete_issue(
+        &self,
+        request: Request<DeleteIssueRequest>,
+    ) -> Result<Response<DeleteIssueResponse>, Status> {
+        let req = request.into_inner();
+        let project_path = Path::new(&req.project_path);
+
+        match delete_issue(project_path, &req.issue_number).await {
+            Ok(result) => Ok(Response::new(DeleteIssueResponse {
+                success: true,
+                error: String::new(),
+                manifest: Some(manifest_to_proto(&result.manifest)),
+            })),
+            Err(e) => Ok(Response::new(DeleteIssueResponse {
+                success: false,
+                error: e.to_string(),
+                manifest: None,
+            })),
+        }
+    }
+
     async fn get_next_issue_number(
         &self,
         request: Request<GetNextIssueNumberRequest>,
@@ -272,5 +362,20 @@ fn config_to_proto(config: &CentyConfig) -> Config {
             })
             .collect(),
         defaults: config.defaults.clone(),
+    }
+}
+
+fn issue_to_proto(issue: &crate::issue::Issue) -> Issue {
+    Issue {
+        issue_number: issue.issue_number.clone(),
+        title: issue.title.clone(),
+        description: issue.description.clone(),
+        metadata: Some(IssueMetadata {
+            status: issue.metadata.status.clone(),
+            priority: issue.metadata.priority.clone(),
+            created_at: issue.metadata.created_at.clone(),
+            updated_at: issue.metadata.updated_at.clone(),
+            custom_fields: issue.metadata.custom_fields.clone(),
+        }),
     }
 }
