@@ -1,4 +1,4 @@
-use crate::config::{read_config, CentyConfig};
+use crate::config::{read_config, write_config, CentyConfig, CustomFieldDefinition as InternalCustomFieldDef, LlmConfig as InternalLlmConfig};
 use crate::migration::{create_registry, MigrationExecutor};
 use crate::version::{compare_versions, daemon_version, SemVer, VersionComparison};
 use crate::docs::{
@@ -361,8 +361,71 @@ impl CentyDaemon for CentyDaemonService {
                 ],
                 default_state: "open".to_string(),
                 version: crate::utils::CENTY_VERSION.to_string(),
+                state_colors: std::collections::HashMap::new(),
+                priority_colors: std::collections::HashMap::new(),
+                llm: Some(LlmConfig {
+                    auto_close_on_complete: false,
+                    update_status_on_start: false,
+                    allow_direct_edits: false,
+                }),
             })),
             Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+
+    async fn update_config(
+        &self,
+        request: Request<UpdateConfigRequest>,
+    ) -> Result<Response<UpdateConfigResponse>, Status> {
+        let req = request.into_inner();
+        track_project_async(req.project_path.clone());
+        let project_path = Path::new(&req.project_path);
+
+        // Check if project is initialized
+        let centy_path = get_centy_path(project_path);
+        let manifest_path = centy_path.join(".centy-manifest.json");
+        if !manifest_path.exists() {
+            return Ok(Response::new(UpdateConfigResponse {
+                success: false,
+                error: "Project not initialized".to_string(),
+                config: None,
+            }));
+        }
+
+        // Convert proto to internal config
+        let proto_config = match req.config {
+            Some(c) => c,
+            None => {
+                return Ok(Response::new(UpdateConfigResponse {
+                    success: false,
+                    error: "No config provided".to_string(),
+                    config: None,
+                }));
+            }
+        };
+        let config = proto_to_config(&proto_config);
+
+        // Validate config
+        if let Err(e) = validate_config(&config) {
+            return Ok(Response::new(UpdateConfigResponse {
+                success: false,
+                error: e,
+                config: None,
+            }));
+        }
+
+        // Write config
+        match write_config(project_path, &config).await {
+            Ok(()) => Ok(Response::new(UpdateConfigResponse {
+                success: true,
+                error: String::new(),
+                config: Some(config_to_proto(&config)),
+            })),
+            Err(e) => Ok(Response::new(UpdateConfigResponse {
+                success: false,
+                error: e.to_string(),
+                config: None,
+            })),
         }
     }
 
@@ -989,7 +1052,102 @@ fn config_to_proto(config: &CentyConfig) -> Config {
         allowed_states: config.allowed_states.clone(),
         default_state: config.default_state.clone(),
         version: config.effective_version(),
+        state_colors: config.state_colors.clone(),
+        priority_colors: config.priority_colors.clone(),
+        llm: Some(LlmConfig {
+            auto_close_on_complete: config.llm.auto_close_on_complete,
+            update_status_on_start: config.llm.update_status_on_start,
+            allow_direct_edits: config.llm.allow_direct_edits,
+        }),
     }
+}
+
+fn proto_to_config(proto: &Config) -> CentyConfig {
+    let llm_config = proto.llm.as_ref().map(|l| InternalLlmConfig {
+        auto_close_on_complete: l.auto_close_on_complete,
+        update_status_on_start: l.update_status_on_start,
+        allow_direct_edits: l.allow_direct_edits,
+    }).unwrap_or_default();
+
+    CentyConfig {
+        version: if proto.version.is_empty() { None } else { Some(proto.version.clone()) },
+        priority_levels: proto.priority_levels as u32,
+        custom_fields: proto
+            .custom_fields
+            .iter()
+            .map(|f| InternalCustomFieldDef {
+                name: f.name.clone(),
+                field_type: f.field_type.clone(),
+                required: f.required,
+                default_value: if f.default_value.is_empty() { None } else { Some(f.default_value.clone()) },
+                enum_values: f.enum_values.clone(),
+            })
+            .collect(),
+        defaults: proto.defaults.clone(),
+        allowed_states: proto.allowed_states.clone(),
+        default_state: proto.default_state.clone(),
+        state_colors: proto.state_colors.clone(),
+        priority_colors: proto.priority_colors.clone(),
+        llm: llm_config,
+    }
+}
+
+/// Validate the config and return an error message if invalid
+fn validate_config(config: &CentyConfig) -> Result<(), String> {
+    // Check allowed_states is not empty
+    if config.allowed_states.is_empty() {
+        return Err("allowed_states must not be empty".to_string());
+    }
+
+    // Check default_state is in allowed_states
+    if !config.allowed_states.contains(&config.default_state) {
+        return Err(format!(
+            "default_state '{}' must be in allowed_states",
+            config.default_state
+        ));
+    }
+
+    // Check priority_levels is in valid range
+    if config.priority_levels < 1 || config.priority_levels > 10 {
+        return Err("priority_levels must be between 1 and 10".to_string());
+    }
+
+    // Check custom field names are unique
+    let mut field_names = std::collections::HashSet::new();
+    for field in &config.custom_fields {
+        if !field_names.insert(&field.name) {
+            return Err(format!("duplicate custom field name: '{}'", field.name));
+        }
+
+        // Check enum fields have values
+        if field.field_type == "enum" && field.enum_values.is_empty() {
+            return Err(format!(
+                "custom field '{}' is of type 'enum' but has no enum_values",
+                field.name
+            ));
+        }
+    }
+
+    // Validate color formats (hex colors)
+    let hex_color_regex = regex::Regex::new(r"^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$").unwrap();
+    for (state, color) in &config.state_colors {
+        if !hex_color_regex.is_match(color) {
+            return Err(format!(
+                "invalid color '{}' for state '{}': must be hex format (#RGB or #RRGGBB)",
+                color, state
+            ));
+        }
+    }
+    for (priority, color) in &config.priority_colors {
+        if !hex_color_regex.is_match(color) {
+            return Err(format!(
+                "invalid color '{}' for priority '{}': must be hex format (#RGB or #RRGGBB)",
+                color, priority
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 #[allow(deprecated)]

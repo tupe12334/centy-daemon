@@ -40,6 +40,9 @@ service CentyDaemon {
   // Read configuration
   rpc GetConfig(GetConfigRequest) returns (Config);
 
+  // Update configuration
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+
   // Check if centy is initialized in a directory
   rpc IsInitialized(IsInitializedRequest) returns (IsInitializedResponse);
 
@@ -343,6 +346,9 @@ message Config {
   repeated string allowed_states = 4;  // Allowed status values (default: ["open", "in-progress", "closed"])
   string default_state = 5;            // Default state for new issues (default: "open")
   string version = 6;                  // Project version (semver, empty = daemon default)
+  map<string, string> state_colors = 7;     // State name → hex color (e.g., "open" → "#10b981")
+  map<string, string> priority_colors = 8;  // Priority level → hex color (e.g., "1" → "#ef4444")
+  LlmConfig llm = 9;                        // LLM-related settings
 }
 
 message CustomFieldDefinition {
@@ -351,6 +357,23 @@ message CustomFieldDefinition {
   bool required = 3;
   string default_value = 4;
   repeated string enum_values = 5;  // For enum type
+}
+
+message LlmConfig {
+  bool auto_close_on_complete = 1;    // Auto-close issues when marked complete by LLM
+  bool update_status_on_start = 2;    // Update status to in-progress when LLM starts work
+  bool allow_direct_edits = 3;        // Allow LLM to directly edit issue files
+}
+
+message UpdateConfigRequest {
+  string project_path = 1;
+  Config config = 2;
+}
+
+message UpdateConfigResponse {
+  bool success = 1;
+  string error = 2;
+  Config config = 3;  // The saved config (with any normalization applied)
 }
 
 // ============ Utility Messages ============

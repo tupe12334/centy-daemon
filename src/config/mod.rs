@@ -87,6 +87,12 @@ pub struct CentyConfig {
     /// Default state for new issues (default: "open")
     #[serde(default = "default_state")]
     pub default_state: String,
+    /// State colors: state name → hex color (e.g., "open" → "#10b981")
+    #[serde(default)]
+    pub state_colors: HashMap<String, String>,
+    /// Priority colors: priority level → hex color (e.g., "1" → "#ef4444")
+    #[serde(default)]
+    pub priority_colors: HashMap<String, String>,
     /// LLM configuration for automated issue management
     #[serde(default)]
     pub llm: LlmConfig,
@@ -110,6 +116,8 @@ impl Default for CentyConfig {
             defaults: HashMap::new(),
             allowed_states: default_allowed_states(),
             default_state: default_state(),
+            state_colors: HashMap::new(),
+            priority_colors: HashMap::new(),
             llm: LlmConfig::default(),
         }
     }
