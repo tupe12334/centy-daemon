@@ -101,6 +101,14 @@ service CentyDaemon {
 
   // Update project to target version (runs migrations)
   rpc UpdateVersion(UpdateVersionRequest) returns (UpdateVersionResponse);
+
+  // ============ Daemon Control RPCs ============
+
+  // Shutdown the daemon gracefully
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // Restart the daemon
+  rpc Restart(RestartRequest) returns (RestartResponse);
 }
 
 // ============ Init Messages ============
@@ -582,4 +590,26 @@ message UpdateVersionResponse {
   string from_version = 3;
   string to_version = 4;
   repeated string migrations_applied = 5;
+}
+
+// ============ Daemon Control Messages ============
+
+message ShutdownRequest {
+  // Optional delay in seconds before shutdown (default: 0)
+  uint32 delay_seconds = 1;
+}
+
+message ShutdownResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RestartRequest {
+  // Optional delay in seconds before restart (default: 0)
+  uint32 delay_seconds = 1;
+}
+
+message RestartResponse {
+  bool success = 1;
+  string message = 2;
 }

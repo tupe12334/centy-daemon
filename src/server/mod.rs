@@ -19,8 +19,12 @@ use crate::registry::{
     get_project_info, list_projects, track_project_async, untrack_project, ProjectInfo,
 };
 use crate::utils::get_centy_path;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Arc;
+use tokio::sync::watch;
 use tonic::{Request, Response, Status};
+use tracing::info;
 
 // Import generated protobuf types
 pub mod proto {
@@ -30,17 +34,22 @@ pub mod proto {
 use proto::centy_daemon_server::CentyDaemon;
 use proto::*;
 
-pub struct CentyDaemonService;
-
-impl CentyDaemonService {
-    pub fn new() -> Self {
-        Self
-    }
+/// Signal type for daemon shutdown/restart
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShutdownSignal {
+    None,
+    Shutdown,
+    Restart,
 }
 
-impl Default for CentyDaemonService {
-    fn default() -> Self {
-        Self::new()
+pub struct CentyDaemonService {
+    shutdown_tx: Arc<watch::Sender<ShutdownSignal>>,
+    exe_path: Option<PathBuf>,
+}
+
+impl CentyDaemonService {
+    pub fn new(shutdown_tx: Arc<watch::Sender<ShutdownSignal>>, exe_path: Option<PathBuf>) -> Self {
+        Self { shutdown_tx, exe_path }
     }
 }
 
@@ -833,6 +842,95 @@ impl CentyDaemon for CentyDaemonService {
                 migrations_applied: vec![],
             })),
         }
+    }
+
+    // ============ Daemon Control RPCs ============
+
+    async fn shutdown(
+        &self,
+        request: Request<ShutdownRequest>,
+    ) -> Result<Response<ShutdownResponse>, Status> {
+        let req = request.into_inner();
+        let delay = req.delay_seconds;
+
+        info!("Shutdown requested with delay: {} seconds", delay);
+
+        // Clone the sender for use in the spawned task
+        let shutdown_tx = self.shutdown_tx.clone();
+
+        // Spawn a task to handle the delayed shutdown
+        tokio::spawn(async move {
+            if delay > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_secs(delay as u64)).await;
+            }
+            let _ = shutdown_tx.send(ShutdownSignal::Shutdown);
+        });
+
+        let message = if delay > 0 {
+            format!("Daemon will shutdown in {} seconds", delay)
+        } else {
+            "Daemon shutting down".to_string()
+        };
+
+        Ok(Response::new(ShutdownResponse {
+            success: true,
+            message,
+        }))
+    }
+
+    async fn restart(
+        &self,
+        request: Request<RestartRequest>,
+    ) -> Result<Response<RestartResponse>, Status> {
+        let req = request.into_inner();
+        let delay = req.delay_seconds;
+
+        info!("Restart requested with delay: {} seconds", delay);
+
+        // Check if we have the executable path
+        let exe_path = match &self.exe_path {
+            Some(path) => path.clone(),
+            None => {
+                return Ok(Response::new(RestartResponse {
+                    success: false,
+                    message: "Cannot restart: unable to determine executable path".to_string(),
+                }));
+            }
+        };
+
+        // Clone what we need for the spawned task
+        let shutdown_tx = self.shutdown_tx.clone();
+
+        // Spawn a task to handle the delayed restart
+        tokio::spawn(async move {
+            if delay > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_secs(delay as u64)).await;
+            }
+
+            // Spawn a new daemon process before shutting down
+            info!("Spawning new daemon process: {:?}", exe_path);
+            match Command::new(&exe_path).spawn() {
+                Ok(_) => {
+                    info!("New daemon process spawned successfully");
+                    // Signal the current server to shutdown
+                    let _ = shutdown_tx.send(ShutdownSignal::Restart);
+                }
+                Err(e) => {
+                    info!("Failed to spawn new daemon process: {}", e);
+                }
+            }
+        });
+
+        let message = if delay > 0 {
+            format!("Daemon will restart in {} seconds", delay)
+        } else {
+            "Daemon restarting".to_string()
+        };
+
+        Ok(Response::new(RestartResponse {
+            success: true,
+            message,
+        }))
     }
 }
 

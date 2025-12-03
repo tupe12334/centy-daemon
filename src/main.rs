@@ -13,7 +13,9 @@ mod version;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use http::Method;
 use server::proto::centy_daemon_server::CentyDaemonServer;
-use server::CentyDaemonService;
+use server::{CentyDaemonService, ShutdownSignal};
+use std::sync::Arc;
+use tokio::sync::watch;
 use tonic::transport::Server;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{info, Level};
@@ -37,7 +39,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| DEFAULT_ADDR.to_string())
         .parse()?;
 
-    let service = CentyDaemonService::new();
+    // Create shutdown signal channel
+    let (shutdown_tx, mut shutdown_rx) = watch::channel(ShutdownSignal::None);
+    let shutdown_tx = Arc::new(shutdown_tx);
+
+    // Get the current executable path for restart
+    let exe_path = std::env::current_exe().ok();
+
+    let service = CentyDaemonService::new(shutdown_tx.clone(), exe_path);
 
     // Create reflection service
     let reflection_service = tonic_reflection::server::Builder::configure()
@@ -80,8 +89,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(tonic_web::GrpcWebLayer::new())
         .add_service(reflection_service)
         .add_service(CentyDaemonServer::new(service))
-        .serve(addr)
+        .serve_with_shutdown(addr, async move {
+            // Wait for shutdown signal
+            loop {
+                shutdown_rx.changed().await.ok();
+                match *shutdown_rx.borrow() {
+                    ShutdownSignal::Shutdown => {
+                        info!("Received shutdown signal, stopping server...");
+                        break;
+                    }
+                    ShutdownSignal::Restart => {
+                        info!("Received restart signal, stopping server...");
+                        break;
+                    }
+                    ShutdownSignal::None => continue,
+                }
+            }
+        })
         .await?;
 
+    info!("Centy daemon stopped");
     Ok(())
 }
