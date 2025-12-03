@@ -52,6 +52,9 @@ fn default_state() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentyConfig {
+    /// Project version (semver string). Defaults to daemon version if not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     /// Number of priority levels (1-10). Default is 3 (high/medium/low).
     /// - 2 levels: high, low
     /// - 3 levels: high, medium, low
@@ -71,9 +74,19 @@ pub struct CentyConfig {
     pub default_state: String,
 }
 
+impl CentyConfig {
+    /// Get the effective version (config version or daemon default).
+    pub fn effective_version(&self) -> String {
+        self.version
+            .clone()
+            .unwrap_or_else(|| crate::utils::CENTY_VERSION.to_string())
+    }
+}
+
 impl Default for CentyConfig {
     fn default() -> Self {
         Self {
+            version: None,
             priority_levels: default_priority_levels(),
             custom_fields: Vec::new(),
             defaults: HashMap::new(),

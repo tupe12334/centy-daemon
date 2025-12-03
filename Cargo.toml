@@ -48,6 +48,10 @@ uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Async traits and lazy statics
+async-trait = "0.1"
+once_cell = "1"
+
 [build-dependencies]
 tonic-build = "0.12"
 protobuf-src = "2"

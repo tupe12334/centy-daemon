@@ -90,6 +90,17 @@ service CentyDaemon {
 
   // Get info about a specific project
   rpc GetProjectInfo(GetProjectInfoRequest) returns (GetProjectInfoResponse);
+
+  // ============ Version RPCs ============
+
+  // Get daemon version info
+  rpc GetDaemonInfo(GetDaemonInfoRequest) returns (DaemonInfo);
+
+  // Get project version info and comparison with daemon
+  rpc GetProjectVersion(GetProjectVersionRequest) returns (ProjectVersionInfo);
+
+  // Update project to target version (runs migrations)
+  rpc UpdateVersion(UpdateVersionRequest) returns (UpdateVersionResponse);
 }
 
 // ============ Init Messages ============
@@ -323,6 +334,7 @@ message Config {
   int32 priority_levels = 3;      // Number of priority levels (default: 3)
   repeated string allowed_states = 4;  // Allowed status values (default: ["open", "in-progress", "closed"])
   string default_state = 5;            // Default state for new issues (default: "open")
+  string version = 6;                  // Project version (semver, empty = daemon default)
 }
 
 message CustomFieldDefinition {
@@ -537,4 +549,37 @@ message GetProjectInfoRequest {
 message GetProjectInfoResponse {
   bool found = 1;
   ProjectInfo project = 2;
+}
+
+// ============ Version Messages ============
+
+message GetDaemonInfoRequest {}
+
+message DaemonInfo {
+  string version = 1;                    // Current daemon version (e.g., "0.1.0")
+  repeated string available_versions = 2; // All versions we can migrate to
+}
+
+message GetProjectVersionRequest {
+  string project_path = 1;
+}
+
+message ProjectVersionInfo {
+  string project_version = 1;            // Version from config (or default)
+  string daemon_version = 2;             // Current daemon version
+  string comparison = 3;                 // "equal", "project_behind", "project_ahead"
+  bool degraded_mode = 4;                // True if project > daemon
+}
+
+message UpdateVersionRequest {
+  string project_path = 1;
+  string target_version = 2;             // Target version to migrate to
+}
+
+message UpdateVersionResponse {
+  bool success = 1;
+  string error = 2;
+  string from_version = 3;
+  string to_version = 4;
+  repeated string migrations_applied = 5;
 }

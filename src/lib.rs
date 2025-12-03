@@ -2,11 +2,13 @@ pub mod config;
 pub mod docs;
 pub mod issue;
 pub mod manifest;
+pub mod migration;
 pub mod reconciliation;
 pub mod registry;
 pub mod server;
 pub mod template;
 pub mod utils;
+pub mod version;
 
 // Re-export commonly used types
 pub use config::{CentyConfig, CustomFieldDefinition};
@@ -31,3 +33,8 @@ pub use registry::{
 };
 pub use server::CentyDaemonService;
 pub use template::{DocTemplateContext, IssueTemplateContext, TemplateEngine, TemplateError, TemplateType};
+pub use migration::{
+    create_registry, Migration, MigrationDirection, MigrationError, MigrationExecutor,
+    MigrationRegistry, MigrationResult,
+};
+pub use version::{compare_versions, daemon_version, SemVer, VersionComparison, VersionError};

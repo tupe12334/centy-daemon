@@ -166,10 +166,12 @@ name = "centy-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "handlebars",
  "hex",
  "http",
+ "once_cell",
  "prost",
  "protobuf-src",
  "serde",

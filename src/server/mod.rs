@@ -1,4 +1,6 @@
 use crate::config::{read_config, CentyConfig};
+use crate::migration::{create_registry, MigrationExecutor};
+use crate::version::{compare_versions, daemon_version, SemVer, VersionComparison};
 use crate::docs::{
     create_doc, delete_doc, get_doc, list_docs, update_doc, CreateDocOptions, UpdateDocOptions,
 };
@@ -349,6 +351,7 @@ impl CentyDaemon for CentyDaemonService {
                     "closed".to_string(),
                 ],
                 default_state: "open".to_string(),
+                version: crate::utils::CENTY_VERSION.to_string(),
             })),
             Err(e) => Err(Status::internal(e.to_string())),
         }
@@ -739,6 +742,98 @@ impl CentyDaemon for CentyDaemonService {
             Err(e) => Err(Status::internal(e.to_string())),
         }
     }
+
+    // ============ Version RPCs ============
+
+    async fn get_daemon_info(
+        &self,
+        _request: Request<GetDaemonInfoRequest>,
+    ) -> Result<Response<DaemonInfo>, Status> {
+        let daemon_ver = daemon_version();
+        let registry = create_registry();
+
+        Ok(Response::new(DaemonInfo {
+            version: daemon_ver.to_string(),
+            available_versions: registry.available_versions(),
+        }))
+    }
+
+    async fn get_project_version(
+        &self,
+        request: Request<GetProjectVersionRequest>,
+    ) -> Result<Response<ProjectVersionInfo>, Status> {
+        let req = request.into_inner();
+        track_project_async(req.project_path.clone());
+        let project_path = Path::new(&req.project_path);
+
+        let config = read_config(project_path).await.ok().flatten();
+        let project_ver_str = config
+            .as_ref()
+            .and_then(|c| c.version.clone())
+            .unwrap_or_else(|| crate::utils::CENTY_VERSION.to_string());
+
+        let project_ver = match SemVer::parse(&project_ver_str) {
+            Ok(v) => v,
+            Err(e) => return Err(Status::invalid_argument(e.to_string())),
+        };
+        let daemon_ver = daemon_version();
+
+        let comparison = compare_versions(&project_ver, &daemon_ver);
+        let (comparison_str, degraded) = match comparison {
+            VersionComparison::Equal => ("equal", false),
+            VersionComparison::ProjectBehind => ("project_behind", false),
+            VersionComparison::ProjectAhead => ("project_ahead", true),
+        };
+
+        Ok(Response::new(ProjectVersionInfo {
+            project_version: project_ver_str,
+            daemon_version: daemon_ver.to_string(),
+            comparison: comparison_str.to_string(),
+            degraded_mode: degraded,
+        }))
+    }
+
+    async fn update_version(
+        &self,
+        request: Request<UpdateVersionRequest>,
+    ) -> Result<Response<UpdateVersionResponse>, Status> {
+        let req = request.into_inner();
+        track_project_async(req.project_path.clone());
+        let project_path = Path::new(&req.project_path);
+
+        let target = match SemVer::parse(&req.target_version) {
+            Ok(v) => v,
+            Err(e) => {
+                return Ok(Response::new(UpdateVersionResponse {
+                    success: false,
+                    error: format!("Invalid target version: {}", e),
+                    from_version: String::new(),
+                    to_version: String::new(),
+                    migrations_applied: vec![],
+                }));
+            }
+        };
+
+        let registry = create_registry();
+        let executor = MigrationExecutor::new(registry);
+
+        match executor.migrate(project_path, &target).await {
+            Ok(result) => Ok(Response::new(UpdateVersionResponse {
+                success: result.success,
+                error: result.error.unwrap_or_default(),
+                from_version: result.from_version,
+                to_version: result.to_version,
+                migrations_applied: result.migrations_applied,
+            })),
+            Err(e) => Ok(Response::new(UpdateVersionResponse {
+                success: false,
+                error: e.to_string(),
+                from_version: String::new(),
+                to_version: String::new(),
+                migrations_applied: vec![],
+            })),
+        }
+    }
 }
 
 // Helper functions for converting internal types to proto types
@@ -795,6 +890,7 @@ fn config_to_proto(config: &CentyConfig) -> Config {
         priority_levels: config.priority_levels as i32,
         allowed_states: config.allowed_states.clone(),
         default_state: config.default_state.clone(),
+        version: config.effective_version(),
     }
 }
 

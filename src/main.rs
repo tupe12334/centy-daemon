@@ -2,11 +2,13 @@ mod config;
 mod docs;
 mod issue;
 mod manifest;
+mod migration;
 mod reconciliation;
 mod registry;
 mod server;
 mod template;
 mod utils;
+mod version;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 use http::Method;
