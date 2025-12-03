@@ -304,6 +304,8 @@ message Config {
   repeated CustomFieldDefinition custom_fields = 1;
   map<string, string> defaults = 2;
   int32 priority_levels = 3;      // Number of priority levels (default: 3)
+  repeated string allowed_states = 4;  // Allowed status values (default: ["open", "in-progress", "closed"])
+  string default_state = 5;            // Default state for new issues (default: "open")
 }
 
 message CustomFieldDefinition {

@@ -340,6 +340,12 @@ impl CentyDaemon for CentyDaemonService {
                 custom_fields: vec![],
                 defaults: std::collections::HashMap::new(),
                 priority_levels: 3, // Default
+                allowed_states: vec![
+                    "open".to_string(),
+                    "in-progress".to_string(),
+                    "closed".to_string(),
+                ],
+                default_state: "open".to_string(),
             })),
             Err(e) => Err(Status::internal(e.to_string())),
         }
@@ -634,6 +640,8 @@ fn config_to_proto(config: &CentyConfig) -> Config {
             .collect(),
         defaults: config.defaults.clone(),
         priority_levels: config.priority_levels as i32,
+        allowed_states: config.allowed_states.clone(),
+        default_state: config.default_state.clone(),
     }
 }
 

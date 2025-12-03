@@ -1,8 +1,8 @@
 mod common;
 
 use centy_daemon::issue::{
-    create_issue, delete_issue, get_issue, list_issues, update_issue, CreateIssueOptions,
-    IssueError, IssueCrudError, UpdateIssueOptions,
+    create_issue, delete_issue, get_issue, get_issue_by_display_number, is_uuid, list_issues,
+    update_issue, CreateIssueOptions, IssueError, IssueCrudError, UpdateIssueOptions,
 };
 use common::{create_test_dir, init_centy_project};
 use std::collections::HashMap;
@@ -29,18 +29,20 @@ async fn test_create_issue_success() {
         .await
         .expect("Should create issue");
 
-    assert_eq!(result.issue_number, "0001");
+    // Issue ID should be a UUID
+    assert!(is_uuid(&result.id), "Issue ID should be a UUID");
+    assert_eq!(result.display_number, 1);
     assert_eq!(result.created_files.len(), 3); // issue.md, metadata.json, assets/
 
-    // Verify files exist
-    let issue_path = project_path.join(".centy/issues/0001");
+    // Verify files exist using UUID folder
+    let issue_path = project_path.join(format!(".centy/issues/{}", result.id));
     assert!(issue_path.join("issue.md").exists());
     assert!(issue_path.join("metadata.json").exists());
     assert!(issue_path.join("assets").exists());
 }
 
 #[tokio::test]
-async fn test_create_issue_increments_number() {
+async fn test_create_issue_increments_display_number() {
     let temp_dir = create_test_dir();
     let project_path = temp_dir.path();
 
@@ -52,7 +54,8 @@ async fn test_create_issue_increments_number() {
         ..Default::default()
     };
     let result1 = create_issue(project_path, options1).await.expect("Should create");
-    assert_eq!(result1.issue_number, "0001");
+    assert!(is_uuid(&result1.id), "Issue ID should be a UUID");
+    assert_eq!(result1.display_number, 1);
 
     // Create second issue
     let options2 = CreateIssueOptions {
@@ -60,7 +63,8 @@ async fn test_create_issue_increments_number() {
         ..Default::default()
     };
     let result2 = create_issue(project_path, options2).await.expect("Should create");
-    assert_eq!(result2.issue_number, "0002");
+    assert!(is_uuid(&result2.id), "Issue ID should be a UUID");
+    assert_eq!(result2.display_number, 2);
 
     // Create third issue
     let options3 = CreateIssueOptions {
@@ -68,7 +72,12 @@ async fn test_create_issue_increments_number() {
         ..Default::default()
     };
     let result3 = create_issue(project_path, options3).await.expect("Should create");
-    assert_eq!(result3.issue_number, "0003");
+    assert!(is_uuid(&result3.id), "Issue ID should be a UUID");
+    assert_eq!(result3.display_number, 3);
+
+    // All IDs should be unique
+    assert_ne!(result1.id, result2.id);
+    assert_ne!(result2.id, result3.id);
 }
 
 #[tokio::test]
@@ -118,11 +127,11 @@ async fn test_create_issue_default_priority_and_status() {
         ..Default::default()
     };
 
-    create_issue(project_path, options).await.expect("Should create");
+    let result = create_issue(project_path, options).await.expect("Should create");
 
     // Get the issue and verify defaults
     // Default priority with 3 levels (high/medium/low) is 2 (medium)
-    let issue = get_issue(project_path, "0001").await.expect("Should get issue");
+    let issue = get_issue(project_path, &result.id).await.expect("Should get issue");
     assert_eq!(issue.metadata.priority, 2); // medium
     assert_eq!(issue.metadata.status, "open");
 }
@@ -143,12 +152,13 @@ async fn test_get_issue_success() {
         custom_fields: HashMap::new(),
         ..Default::default()
     };
-    create_issue(project_path, options).await.expect("Should create");
+    let result = create_issue(project_path, options).await.expect("Should create");
 
-    // Get the issue
-    let issue = get_issue(project_path, "0001").await.expect("Should get issue");
+    // Get the issue by UUID
+    let issue = get_issue(project_path, &result.id).await.expect("Should get issue");
 
-    assert_eq!(issue.issue_number, "0001");
+    assert!(is_uuid(&issue.id), "Issue ID should be a UUID");
+    assert_eq!(issue.metadata.display_number, 1);
     assert_eq!(issue.title, "My Test Issue");
     assert_eq!(issue.description, "Description here");
     assert_eq!(issue.metadata.priority, 1); // high
@@ -205,10 +215,14 @@ async fn test_list_issues_returns_all() {
         .expect("Should list issues");
 
     assert_eq!(issues.len(), 3);
-    // Should be sorted by issue number
-    assert_eq!(issues[0].issue_number, "0001");
-    assert_eq!(issues[1].issue_number, "0002");
-    assert_eq!(issues[2].issue_number, "0003");
+    // Should be sorted by display number
+    assert_eq!(issues[0].metadata.display_number, 1);
+    assert_eq!(issues[1].metadata.display_number, 2);
+    assert_eq!(issues[2].metadata.display_number, 3);
+    // All should have UUID IDs
+    for issue in &issues {
+        assert!(is_uuid(&issue.id), "Issue ID should be a UUID");
+    }
 }
 
 #[tokio::test]
@@ -301,7 +315,7 @@ async fn test_update_issue_title() {
     init_centy_project(project_path).await;
 
     // Create issue
-    create_issue(
+    let created = create_issue(
         project_path,
         CreateIssueOptions {
             title: "Original Title".to_string(),
@@ -317,14 +331,14 @@ async fn test_update_issue_title() {
         ..Default::default()
     };
 
-    let result = update_issue(project_path, "0001", options)
+    let result = update_issue(project_path, &created.id, options)
         .await
         .expect("Should update");
 
     assert_eq!(result.issue.title, "Updated Title");
 
     // Verify persisted
-    let issue = get_issue(project_path, "0001").await.unwrap();
+    let issue = get_issue(project_path, &created.id).await.unwrap();
     assert_eq!(issue.title, "Updated Title");
 }
 
@@ -335,7 +349,7 @@ async fn test_update_issue_status() {
 
     init_centy_project(project_path).await;
 
-    create_issue(
+    let created = create_issue(
         project_path,
         CreateIssueOptions {
             title: "Test".to_string(),
@@ -349,7 +363,7 @@ async fn test_update_issue_status() {
     // Update status
     let result = update_issue(
         project_path,
-        "0001",
+        &created.id,
         UpdateIssueOptions {
             status: Some("closed".to_string()),
             ..Default::default()
@@ -369,7 +383,7 @@ async fn test_update_issue_preserves_unchanged_fields() {
     init_centy_project(project_path).await;
 
     // Create with specific values
-    create_issue(
+    let created = create_issue(
         project_path,
         CreateIssueOptions {
             title: "Original".to_string(),
@@ -385,7 +399,7 @@ async fn test_update_issue_preserves_unchanged_fields() {
     // Only update title
     let result = update_issue(
         project_path,
-        "0001",
+        &created.id,
         UpdateIssueOptions {
             title: Some("New Title".to_string()),
             ..Default::default()
