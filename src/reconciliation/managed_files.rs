@@ -20,7 +20,7 @@ This folder is managed by [Centy](https://github.com/tupe12334/centy-cli).
 - **DO NOT** directly edit or create files in the `.centy/` folder
 - **DO NOT** manually modify issue files, metadata, or documentation
 - **ALWAYS** use the `centy` CLI commands to manage issues and documentation
-- The centy-cli ensures proper file structure, metadata updates, and manifest synchronization
+- The centy cli ensures proper file structure, metadata updates, and manifest synchronization
 
 Use the CLI commands below to interact with the centy system.
 
