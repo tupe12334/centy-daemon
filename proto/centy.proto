@@ -16,8 +16,11 @@ service CentyDaemon {
   // Create a new issue
   rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
 
-  // Get a single issue by number
+  // Get a single issue by ID (UUID or legacy number)
   rpc GetIssue(GetIssueRequest) returns (Issue);
+
+  // Get a single issue by display number (human-readable number like 1, 2, 3)
+  rpc GetIssueByDisplayNumber(GetIssueByDisplayNumberRequest) returns (Issue);
 
   // List all issues with optional filtering
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
@@ -152,14 +155,20 @@ message CreateIssueResponse {
   bool success = 1;
   string error = 2;
 
-  // The created issue number (e.g., "0001")
-  string issue_number = 3;
+  // The created issue ID (UUID)
+  string id = 3;
+
+  // Human-readable display number (1, 2, 3...)
+  uint32 display_number = 4;
+
+  // Legacy: same as id (for backward compatibility)
+  string issue_number = 5;
 
   // Paths to created files
-  repeated string created_files = 4;
+  repeated string created_files = 6;
 
   // The updated manifest
-  Manifest manifest = 5;
+  Manifest manifest = 7;
 }
 
 message GetNextIssueNumberRequest {
@@ -172,24 +181,39 @@ message GetNextIssueNumberResponse {
 
 // Issue represents a full issue with all its data
 message Issue {
-  string issue_number = 1;        // e.g., "0001"
-  string title = 2;
-  string description = 3;
-  IssueMetadata metadata = 4;
+  // UUID-based issue ID (folder name)
+  string id = 1;
+
+  // Human-readable display number (1, 2, 3...)
+  uint32 display_number = 2;
+
+  // Legacy: same as id (for backward compatibility)
+  string issue_number = 3;
+
+  string title = 4;
+  string description = 5;
+  IssueMetadata metadata = 6;
 }
 
 message IssueMetadata {
-  string status = 1;              // e.g., "open", "in-progress", "closed"
-  int32 priority = 2;             // 1 = highest priority, N = lowest
-  string created_at = 3;          // ISO timestamp
-  string updated_at = 4;          // ISO timestamp
-  map<string, string> custom_fields = 5;
-  string priority_label = 6;      // Human-readable label (e.g., "high", "P1")
+  // Human-readable display number (1, 2, 3...)
+  uint32 display_number = 1;
+  string status = 2;              // e.g., "open", "in-progress", "closed"
+  int32 priority = 3;             // 1 = highest priority, N = lowest
+  string created_at = 4;          // ISO timestamp
+  string updated_at = 5;          // ISO timestamp
+  map<string, string> custom_fields = 6;
+  string priority_label = 7;      // Human-readable label (e.g., "high", "P1")
 }
 
 message GetIssueRequest {
   string project_path = 1;
-  string issue_number = 2;        // e.g., "0001"
+  string issue_id = 2;            // UUID or legacy issue number (e.g., "0001")
+}
+
+message GetIssueByDisplayNumberRequest {
+  string project_path = 1;
+  uint32 display_number = 2;      // Human-readable number (1, 2, 3...)
 }
 
 message ListIssuesRequest {
@@ -207,7 +231,7 @@ message ListIssuesResponse {
 
 message UpdateIssueRequest {
   string project_path = 1;
-  string issue_number = 2;
+  string issue_id = 2;            // UUID or legacy issue number
 
   // Fields to update (empty string = don't update, 0 = don't update priority)
   string title = 3;
@@ -226,7 +250,7 @@ message UpdateIssueResponse {
 
 message DeleteIssueRequest {
   string project_path = 1;
-  string issue_number = 2;
+  string issue_id = 2;            // UUID or legacy issue number
 }
 
 message DeleteIssueResponse {

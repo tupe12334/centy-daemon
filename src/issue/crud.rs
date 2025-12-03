@@ -4,8 +4,11 @@ use crate::manifest::{
     ManagedFileType,
 };
 use crate::utils::{compute_hash, get_centy_path, now_iso};
+use super::id::is_valid_issue_folder;
 use super::metadata::IssueMetadata;
 use super::priority::{validate_priority, PriorityError};
+use super::reconcile::{reconcile_display_numbers, ReconcileError};
+use super::status::validate_status;
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -28,16 +31,26 @@ pub enum IssueCrudError {
     #[error("Issue {0} not found")]
     IssueNotFound(String),
 
+    #[error("Issue with display number {0} not found")]
+    IssueDisplayNumberNotFound(u32),
+
     #[error("Invalid issue format: {0}")]
     InvalidIssueFormat(String),
 
     #[error("Invalid priority: {0}")]
     InvalidPriority(#[from] PriorityError),
+
+    #[error("Reconcile error: {0}")]
+    ReconcileError(#[from] ReconcileError),
 }
 
 /// Full issue data
 #[derive(Debug, Clone)]
 pub struct Issue {
+    /// UUID-based issue ID (folder name)
+    pub id: String,
+    /// Legacy field for backward compatibility (same as id)
+    #[deprecated(note = "Use `id` instead")]
     pub issue_number: String,
     pub title: String,
     pub description: String,
@@ -47,6 +60,8 @@ pub struct Issue {
 /// Flattened metadata for API responses
 #[derive(Debug, Clone)]
 pub struct IssueMetadataFlat {
+    /// Human-readable display number (1, 2, 3...)
+    pub display_number: u32,
     pub status: String,
     /// Priority as a number (1 = highest, N = lowest)
     pub priority: u32,
@@ -117,18 +132,21 @@ pub async fn list_issues(
         return Ok(Vec::new());
     }
 
+    // Reconcile display numbers to resolve any conflicts from concurrent creation
+    reconcile_display_numbers(&issues_path).await?;
+
     let mut issues = Vec::new();
     let mut entries = fs::read_dir(&issues_path).await?;
 
     while let Some(entry) = entries.next_entry().await? {
         if entry.file_type().await?.is_dir() {
-            if let Some(issue_number) = entry.file_name().to_str() {
-                // Skip non-numeric directories
-                if issue_number.parse::<u32>().is_err() {
+            if let Some(folder_name) = entry.file_name().to_str() {
+                // Accept both UUID and legacy 4-digit format
+                if !is_valid_issue_folder(folder_name) {
                     continue;
                 }
 
-                match read_issue_from_disk(&entry.path(), issue_number).await {
+                match read_issue_from_disk(&entry.path(), folder_name).await {
                     Ok(issue) => {
                         // Apply filters
                         let status_match = status_filter
@@ -151,10 +169,58 @@ pub async fn list_issues(
         }
     }
 
-    // Sort by issue number
-    issues.sort_by(|a, b| a.issue_number.cmp(&b.issue_number));
+    // Sort by display number (human-readable ordering)
+    issues.sort_by_key(|i| i.metadata.display_number);
 
     Ok(issues)
+}
+
+/// Get an issue by its display number (human-readable number like 1, 2, 3)
+pub async fn get_issue_by_display_number(
+    project_path: &Path,
+    display_number: u32,
+) -> Result<Issue, IssueCrudError> {
+    // Check if centy is initialized
+    read_manifest(project_path)
+        .await?
+        .ok_or(IssueCrudError::NotInitialized)?;
+
+    let centy_path = get_centy_path(project_path);
+    let issues_path = centy_path.join("issues");
+
+    if !issues_path.exists() {
+        return Err(IssueCrudError::IssueDisplayNumberNotFound(display_number));
+    }
+
+    // Reconcile first to ensure display numbers are unique
+    reconcile_display_numbers(&issues_path).await?;
+
+    let mut entries = fs::read_dir(&issues_path).await?;
+
+    while let Some(entry) = entries.next_entry().await? {
+        if entry.file_type().await?.is_dir() {
+            if let Some(folder_name) = entry.file_name().to_str() {
+                if !is_valid_issue_folder(folder_name) {
+                    continue;
+                }
+
+                let metadata_path = entry.path().join("metadata.json");
+                if !metadata_path.exists() {
+                    continue;
+                }
+
+                if let Ok(content) = fs::read_to_string(&metadata_path).await {
+                    if let Ok(metadata) = serde_json::from_str::<IssueMetadata>(&content) {
+                        if metadata.display_number == display_number {
+                            return read_issue_from_disk(&entry.path(), folder_name).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(IssueCrudError::IssueDisplayNumberNotFound(display_number))
 }
 
 /// Update an existing issue
@@ -187,6 +253,11 @@ pub async fn update_issue(
     let new_description = options.description.unwrap_or(current.description);
     let new_status = options.status.unwrap_or(current.metadata.status);
 
+    // Lenient validation: log warning if status is not in allowed_states
+    if let Some(ref config) = config {
+        validate_status(&new_status, &config.allowed_states);
+    }
+
     // Validate and apply priority update
     let new_priority = match options.priority {
         Some(p) => {
@@ -204,6 +275,7 @@ pub async fn update_issue(
 
     // Create updated metadata
     let updated_metadata = IssueMetadata {
+        display_number: current.metadata.display_number,
         status: new_status.clone(),
         priority: new_priority,
         created_at: current.metadata.created_at.clone(),
@@ -248,11 +320,14 @@ pub async fn update_issue(
 
     write_manifest(project_path, &manifest).await?;
 
+    #[allow(deprecated)]
     let issue = Issue {
-        issue_number: issue_number.to_string(),
+        id: issue_number.to_string(),
+        issue_number: issue_number.to_string(), // Legacy field
         title: new_title,
         description: new_description,
         metadata: IssueMetadataFlat {
+            display_number: current.metadata.display_number,
             status: new_status,
             priority: new_priority,
             created_at: current.metadata.created_at,
@@ -327,11 +402,14 @@ async fn read_issue_from_disk(issue_path: &Path, issue_number: &str) -> Result<I
         })
         .collect();
 
+    #[allow(deprecated)]
     Ok(Issue {
-        issue_number: issue_number.to_string(),
+        id: issue_number.to_string(),
+        issue_number: issue_number.to_string(), // Legacy field
         title,
         description,
         metadata: IssueMetadataFlat {
+            display_number: metadata.display_number,
             status: metadata.status,
             priority: metadata.priority,
             created_at: metadata.created_at,

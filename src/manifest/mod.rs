@@ -33,12 +33,20 @@ pub async fn read_manifest(project_path: &Path) -> Result<Option<CentyManifest>,
 }
 
 /// Write the manifest to the project path
+/// Files are sorted by path to ensure deterministic output
 pub async fn write_manifest(
     project_path: &Path,
     manifest: &CentyManifest,
 ) -> Result<(), ManifestError> {
     let manifest_path = get_manifest_path(project_path);
-    let content = serde_json::to_string_pretty(manifest)?;
+
+    // Create a copy with sorted files for deterministic output
+    let mut sorted_manifest = manifest.clone();
+    sorted_manifest
+        .managed_files
+        .sort_by(|a, b| a.path.cmp(&b.path));
+
+    let content = serde_json::to_string_pretty(&sorted_manifest)?;
     fs::write(&manifest_path, content).await?;
     Ok(())
 }
@@ -243,5 +251,47 @@ mod tests {
         // Should NOT contain snake_case
         assert!(!json.contains("schema_version"));
         assert!(!json.contains("centy_version"));
+    }
+
+    #[tokio::test]
+    async fn test_write_manifest_sorts_files_by_path() {
+        use tempfile::tempdir;
+
+        // Create a manifest with files in random order
+        let mut manifest = create_manifest();
+        add_file_to_manifest(
+            &mut manifest,
+            create_managed_file("z-file.md".to_string(), "h1".to_string(), ManagedFileType::File),
+        );
+        add_file_to_manifest(
+            &mut manifest,
+            create_managed_file("a-file.md".to_string(), "h2".to_string(), ManagedFileType::File),
+        );
+        add_file_to_manifest(
+            &mut manifest,
+            create_managed_file("m-file.md".to_string(), "h3".to_string(), ManagedFileType::File),
+        );
+
+        // Create temp directory and write manifest
+        let temp_dir = tempdir().expect("Should create temp dir");
+        let centy_dir = temp_dir.path().join(".centy");
+        fs::create_dir_all(&centy_dir)
+            .await
+            .expect("Should create .centy dir");
+
+        write_manifest(temp_dir.path(), &manifest)
+            .await
+            .expect("Should write manifest");
+
+        // Read back and verify files are sorted
+        let read_manifest = read_manifest(temp_dir.path())
+            .await
+            .expect("Should read manifest")
+            .expect("Manifest should exist");
+
+        assert_eq!(read_manifest.managed_files.len(), 3);
+        assert_eq!(read_manifest.managed_files[0].path, "a-file.md");
+        assert_eq!(read_manifest.managed_files[1].path, "m-file.md");
+        assert_eq!(read_manifest.managed_files[2].path, "z-file.md");
     }
 }

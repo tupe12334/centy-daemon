@@ -3,7 +3,7 @@ use crate::docs::{
     create_doc, delete_doc, get_doc, list_docs, update_doc, CreateDocOptions, UpdateDocOptions,
 };
 use crate::issue::{
-    create_issue, delete_issue, get_issue, list_issues, priority_label, update_issue,
+    create_issue, delete_issue, get_issue, get_issue_by_display_number, list_issues, priority_label, update_issue,
     CreateIssueOptions, UpdateIssueOptions,
 };
 use crate::manifest::{read_manifest, ManagedFileType as InternalFileType};
@@ -151,16 +151,21 @@ impl CentyDaemon for CentyDaemonService {
         };
 
         match create_issue(project_path, options).await {
+            #[allow(deprecated)]
             Ok(result) => Ok(Response::new(CreateIssueResponse {
                 success: true,
                 error: String::new(),
-                issue_number: result.issue_number,
+                id: result.id.clone(),
+                display_number: result.display_number,
+                issue_number: result.issue_number, // Legacy
                 created_files: result.created_files,
                 manifest: Some(manifest_to_proto(&result.manifest)),
             })),
             Err(e) => Ok(Response::new(CreateIssueResponse {
                 success: false,
                 error: e.to_string(),
+                id: String::new(),
+                display_number: 0,
                 issue_number: String::new(),
                 created_files: vec![],
                 manifest: None,
@@ -180,7 +185,25 @@ impl CentyDaemon for CentyDaemonService {
         let config = read_config(project_path).await.ok().flatten();
         let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
 
-        match get_issue(project_path, &req.issue_number).await {
+        match get_issue(project_path, &req.issue_id).await {
+            Ok(issue) => Ok(Response::new(issue_to_proto(&issue, priority_levels))),
+            Err(e) => Err(Status::not_found(e.to_string())),
+        }
+    }
+
+    async fn get_issue_by_display_number(
+        &self,
+        request: Request<GetIssueByDisplayNumberRequest>,
+    ) -> Result<Response<Issue>, Status> {
+        let req = request.into_inner();
+        track_project_async(req.project_path.clone());
+        let project_path = Path::new(&req.project_path);
+
+        // Read config for priority_levels (for label generation)
+        let config = read_config(project_path).await.ok().flatten();
+        let priority_levels = config.as_ref().map(|c| c.priority_levels).unwrap_or(3);
+
+        match get_issue_by_display_number(project_path, req.display_number).await {
             Ok(issue) => Ok(Response::new(issue_to_proto(&issue, priority_levels))),
             Err(e) => Err(Status::not_found(e.to_string())),
         }
@@ -235,7 +258,7 @@ impl CentyDaemon for CentyDaemonService {
             custom_fields: req.custom_fields,
         };
 
-        match update_issue(project_path, &req.issue_number, options).await {
+        match update_issue(project_path, &req.issue_id, options).await {
             Ok(result) => Ok(Response::new(UpdateIssueResponse {
                 success: true,
                 error: String::new(),
@@ -259,7 +282,7 @@ impl CentyDaemon for CentyDaemonService {
         track_project_async(req.project_path.clone());
         let project_path = Path::new(&req.project_path);
 
-        match delete_issue(project_path, &req.issue_number).await {
+        match delete_issue(project_path, &req.issue_id).await {
             Ok(result) => Ok(Response::new(DeleteIssueResponse {
                 success: true,
                 error: String::new(),
@@ -614,12 +637,16 @@ fn config_to_proto(config: &CentyConfig) -> Config {
     }
 }
 
+#[allow(deprecated)]
 fn issue_to_proto(issue: &crate::issue::Issue, priority_levels: u32) -> Issue {
     Issue {
-        issue_number: issue.issue_number.clone(),
+        id: issue.id.clone(),
+        display_number: issue.metadata.display_number,
+        issue_number: issue.issue_number.clone(), // Legacy
         title: issue.title.clone(),
         description: issue.description.clone(),
         metadata: Some(IssueMetadata {
+            display_number: issue.metadata.display_number,
             status: issue.metadata.status.clone(),
             priority: issue.metadata.priority as i32,
             created_at: issue.metadata.created_at.clone(),

@@ -5,8 +5,11 @@ use crate::manifest::{
 };
 use crate::template::{IssueTemplateContext, TemplateEngine, TemplateError};
 use crate::utils::{compute_hash, get_centy_path};
+use super::id::generate_issue_id;
 use super::metadata::IssueMetadata;
 use super::priority::{default_priority, priority_label, validate_priority, PriorityError};
+use super::reconcile::{get_next_display_number, ReconcileError};
+use super::status::validate_status;
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -34,6 +37,9 @@ pub enum IssueError {
 
     #[error("Template error: {0}")]
     TemplateError(#[from] TemplateError),
+
+    #[error("Reconcile error: {0}")]
+    ReconcileError(#[from] ReconcileError),
 }
 
 /// Options for creating an issue
@@ -52,6 +58,12 @@ pub struct CreateIssueOptions {
 /// Result of issue creation
 #[derive(Debug, Clone)]
 pub struct CreateIssueResult {
+    /// UUID-based issue ID (folder name)
+    pub id: String,
+    /// Human-readable display number (1, 2, 3...)
+    pub display_number: u32,
+    /// Legacy field for backward compatibility (same as id)
+    #[deprecated(note = "Use `id` instead")]
     pub issue_number: String,
     pub created_files: Vec<String>,
     pub manifest: CentyManifest,
@@ -80,8 +92,11 @@ pub async fn create_issue(
         fs::create_dir_all(&issues_path).await?;
     }
 
-    // Get next issue number
-    let issue_number = get_next_issue_number(&issues_path).await?;
+    // Generate UUID for folder name (prevents git conflicts)
+    let issue_id = generate_issue_id();
+
+    // Get next display number for human-readable reference
+    let display_number = get_next_display_number(&issues_path).await?;
 
     // Read config for defaults and priority_levels
     let config = read_config(project_path).await.ok().flatten();
@@ -103,13 +118,18 @@ pub async fn create_issue(
         }
     };
 
-    // Determine status
+    // Determine status - use provided value, config.default_state, or fallback to "open"
     let status = options.status.unwrap_or_else(|| {
         config
             .as_ref()
-            .and_then(|c| c.defaults.get("status").cloned())
+            .map(|c| c.default_state.clone())
             .unwrap_or_else(|| "open".to_string())
     });
+
+    // Lenient validation: log warning if status is not in allowed_states
+    if let Some(ref config) = config {
+        validate_status(&status, &config.allowed_states);
+    }
 
     // Build custom fields with defaults from config
     let mut custom_field_values: HashMap<String, serde_json::Value> = HashMap::new();
@@ -132,7 +152,7 @@ pub async fn create_issue(
     }
 
     // Create metadata
-    let metadata = IssueMetadata::new(status.clone(), priority, custom_field_values);
+    let metadata = IssueMetadata::new(display_number, status.clone(), priority, custom_field_values);
 
     // Create issue content
     let issue_md = if let Some(ref template_name) = options.template {
@@ -155,8 +175,8 @@ pub async fn create_issue(
         generate_issue_md(&options.title, &options.description)
     };
 
-    // Write files
-    let issue_folder = issues_path.join(&issue_number);
+    // Write files (using UUID as folder name)
+    let issue_folder = issues_path.join(&issue_id);
     fs::create_dir_all(&issue_folder).await?;
 
     let issue_md_path = issue_folder.join("issue.md");
@@ -169,7 +189,7 @@ pub async fn create_issue(
 
     // Update manifest
     let mut manifest = manifest;
-    let base_path = format!("issues/{}/", issue_number);
+    let base_path = format!("issues/{}/", issue_id);
 
     // Add folder
     add_file_to_manifest(
@@ -212,19 +232,27 @@ pub async fn create_issue(
     write_manifest(project_path, &manifest).await?;
 
     let created_files = vec![
-        format!(".centy/issues/{}/issue.md", issue_number),
-        format!(".centy/issues/{}/metadata.json", issue_number),
-        format!(".centy/issues/{}/assets/", issue_number),
+        format!(".centy/issues/{}/issue.md", issue_id),
+        format!(".centy/issues/{}/metadata.json", issue_id),
+        format!(".centy/issues/{}/assets/", issue_id),
     ];
 
+    #[allow(deprecated)]
     Ok(CreateIssueResult {
-        issue_number,
+        id: issue_id.clone(),
+        display_number,
+        issue_number: issue_id, // Legacy field
         created_files,
         manifest,
     })
 }
 
 /// Get the next issue number (zero-padded to 4 digits)
+///
+/// DEPRECATED: This function is kept for backward compatibility with legacy issues.
+/// New issues use UUID folders with display_number in metadata.
+/// Use `reconcile::get_next_display_number` for display numbers.
+#[deprecated(note = "Use UUID-based folders with display_number in metadata")]
 pub async fn get_next_issue_number(issues_path: &Path) -> Result<String, std::io::Error> {
     if !issues_path.exists() {
         return Ok("0001".to_string());

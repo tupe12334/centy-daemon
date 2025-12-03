@@ -9,6 +9,11 @@ const DEFAULT_PRIORITY_LEVELS: u32 = 3;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssueMetadata {
+    /// Human-readable display number (1, 2, 3...).
+    /// Used for user-facing references while folder uses UUID.
+    /// Default to 0 for backward compatibility with legacy issues.
+    #[serde(default)]
+    pub display_number: u32,
     pub status: String,
     /// Priority as a number (1 = highest, N = lowest).
     /// During deserialization, string values are automatically migrated to numbers.
@@ -21,9 +26,15 @@ pub struct IssueMetadata {
 }
 
 impl IssueMetadata {
-    pub fn new(status: String, priority: u32, custom_fields: HashMap<String, serde_json::Value>) -> Self {
+    pub fn new(
+        display_number: u32,
+        status: String,
+        priority: u32,
+        custom_fields: HashMap<String, serde_json::Value>,
+    ) -> Self {
         let now = crate::utils::now_iso();
         Self {
+            display_number,
             status,
             priority,
             created_at: now.clone(),
@@ -115,17 +126,33 @@ mod tests {
 
     #[test]
     fn test_serialize_priority_as_number() {
-        let metadata = IssueMetadata::new("open".to_string(), 2, HashMap::new());
+        let metadata = IssueMetadata::new(1, "open".to_string(), 2, HashMap::new());
         let json = serde_json::to_string(&metadata).unwrap();
         assert!(json.contains(r#""priority":2"#));
     }
 
     #[test]
     fn test_metadata_new() {
-        let metadata = IssueMetadata::new("open".to_string(), 1, HashMap::new());
+        let metadata = IssueMetadata::new(1, "open".to_string(), 1, HashMap::new());
+        assert_eq!(metadata.display_number, 1);
         assert_eq!(metadata.status, "open");
         assert_eq!(metadata.priority, 1);
         assert!(!metadata.created_at.is_empty());
         assert!(!metadata.updated_at.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_legacy_without_display_number() {
+        // Legacy issues without display_number should default to 0
+        let json = r#"{"status":"open","priority":1,"createdAt":"2024-01-01","updatedAt":"2024-01-01"}"#;
+        let metadata: IssueMetadata = serde_json::from_str(json).unwrap();
+        assert_eq!(metadata.display_number, 0);
+    }
+
+    #[test]
+    fn test_serialize_display_number() {
+        let metadata = IssueMetadata::new(42, "open".to_string(), 1, HashMap::new());
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains(r#""displayNumber":42"#));
     }
 }
