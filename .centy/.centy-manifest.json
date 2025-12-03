@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "centyVersion": "0.1.0",
   "createdAt": "2025-12-02T20:02:39.156268+00:00",
-  "updatedAt": "2025-12-02T21:36:28.894013+00:00",
+  "updatedAt": "2025-12-02T21:37:26.254372+00:00",
   "managedFiles": [
     {
       "path": "issues/0001/",
@@ -142,6 +142,34 @@
       "hash": "",
       "version": "0.1.0",
       "createdAt": "2025-12-02T21:36:28.894013+00:00",
+      "type": "directory"
+    },
+    {
+      "path": "issues/0004/",
+      "hash": "",
+      "version": "0.1.0",
+      "createdAt": "2025-12-02T21:37:26.254359+00:00",
+      "type": "directory"
+    },
+    {
+      "path": "issues/0004/issue.md",
+      "hash": "b822f97a99daf7f74f9838be52113fb1a8058477ffd1bfb33f8d3d23c98deaca",
+      "version": "0.1.0",
+      "createdAt": "2025-12-02T21:37:26.254366+00:00",
+      "type": "file"
+    },
+    {
+      "path": "issues/0004/metadata.json",
+      "hash": "78474536d54538e793e6303b8e8f550c6ec0d12a54d0c19dd5e9b9d28d4a60b3",
+      "version": "0.1.0",
+      "createdAt": "2025-12-02T21:37:26.254370+00:00",
+      "type": "file"
+    },
+    {
+      "path": "issues/0004/assets/",
+      "hash": "",
+      "version": "0.1.0",
+      "createdAt": "2025-12-02T21:37:26.254372+00:00",
       "type": "directory"
     }
   ]
