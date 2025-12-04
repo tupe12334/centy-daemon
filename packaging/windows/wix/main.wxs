@@ -1,72 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-  <Product Id="*"
-           Name="Centy Daemon"
+  <Package Name="Centy Daemon"
            Language="1033"
-           Version="!(bind.FileVersion.CentyDaemonExe)"
+           Version="1.0.0.0"
            Manufacturer="Centy Team"
-           UpgradeCode="F8A5E9D1-4B2C-4A3D-8E6F-1C2D3E4F5A6B">
+           UpgradeCode="F8A5E9D1-4B2C-4A3D-8E6F-1C2D3E4F5A6B"
+           InstallerVersion="500"
+           Compressed="yes"
+           Scope="perMachine">
 
-    <Package InstallerVersion="500"
-             Compressed="yes"
-             InstallScope="perMachine"
-             Description="Centy Daemon - Local-first issue and documentation tracker"
-             Comments="Installs Centy Daemon as a Windows service"/>
+    <SummaryInformation Description="Centy Daemon - Local-first issue and documentation tracker"
+                        Manufacturer="Centy Team" />
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Centy Daemon is already installed."/>
-    <MediaTemplate EmbedCab="yes"/>
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Centy Daemon is already installed." />
+    <MediaTemplate EmbedCab="yes" />
 
     <Feature Id="MainFeature" Title="Centy Daemon" Level="1">
-      <ComponentGroupRef Id="ProductComponents"/>
+      <ComponentGroupRef Id="ProductComponents" />
     </Feature>
 
-    <Feature Id="AutoStartFeature" Title="Start on Boot" Description="Automatically start Centy Daemon when Windows starts" Level="1000">
-      <ComponentRef Id="AutoStartComponent"/>
-    </Feature>
-
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
-
-    <UIRef Id="WixUI_FeatureTree"/>
-
-    <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf"/>
-    <WixVariable Id="WixUIBannerBmp" Value="banner.bmp"/>
-    <WixVariable Id="WixUIDialogBmp" Value="dialog.bmp"/>
-
-  </Product>
-
-  <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="Centy Daemon">
-          <Directory Id="LogsFolder" Name="logs"/>
-        </Directory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Centy Daemon">
+        <Directory Id="LogsFolder" Name="logs" />
       </Directory>
-    </Directory>
-  </Fragment>
+    </StandardDirectory>
 
-  <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
 
       <Component Id="CentyDaemonExeComponent" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
         <File Id="CentyDaemonExe"
-              Source="$(var.BinaryPath)\centy-daemon.exe"
-              KeyPath="yes"/>
+              Source="$(BinaryPath)\centy-daemon.exe"
+              KeyPath="yes" />
       </Component>
 
       <Component Id="WinSWExeComponent" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
         <File Id="WinSWExe"
-              Source="$(var.WinSWPath)\WinSW.exe"
+              Source="$(WinSWPath)\WinSW.exe"
               Name="centy-daemon-service.exe"
-              KeyPath="yes"/>
+              KeyPath="yes" />
       </Component>
 
       <Component Id="WinSWConfigComponent" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
         <File Id="WinSWConfig"
-              Source="$(var.ConfigPath)\centy-daemon.xml"
+              Source="$(ConfigPath)\centy-daemon.xml"
               Name="centy-daemon-service.xml"
-              KeyPath="yes"/>
+              KeyPath="yes" />
       </Component>
 
       <Component Id="ServiceComponent" Guid="D4E5F6A7-B8C9-0123-DEF0-234567890123">
@@ -82,7 +62,7 @@
                               SecondFailureActionType="restart"
                               ThirdFailureActionType="restart"
                               RestartServiceDelayInSeconds="5"
-                              ResetPeriodInDays="1"/>
+                              ResetPeriodInDays="1" />
         </ServiceInstall>
 
         <ServiceControl Id="StartCentyDaemonService"
@@ -90,21 +70,11 @@
                         Start="install"
                         Stop="both"
                         Remove="uninstall"
-                        Wait="yes"/>
+                        Wait="yes" />
       </Component>
 
     </ComponentGroup>
 
-    <Component Id="AutoStartComponent" Directory="INSTALLFOLDER" Guid="E5F6A7B8-C9D0-1234-EF01-345678901234">
-      <Condition>AUTOSTART_FEATURE</Condition>
-      <RegistryValue Root="HKLM"
-                     Key="SYSTEM\CurrentControlSet\Services\centy-daemon"
-                     Name="Start"
-                     Type="integer"
-                     Value="2"
-                     KeyPath="yes"/>
-    </Component>
-
-  </Fragment>
+  </Package>
 
 </Wix>

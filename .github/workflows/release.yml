@@ -335,12 +335,11 @@ jobs:
         run: |
           # Use wix build command with v5
           wix build packaging/windows/wix/main.wxs `
-            -d BinaryPath=staging `
-            -d WinSWPath=staging `
-            -d ConfigPath=staging `
+            -define BinaryPath=staging `
+            -define WinSWPath=staging `
+            -define ConfigPath=staging `
             -ext WixToolset.Util.wixext `
-            -ext WixToolset.UI.wixext `
-            -o "${{ env.BINARY_NAME }}-${{ github.ref_name }}-x86_64.msi"
+            -out "${{ env.BINARY_NAME }}-${{ github.ref_name }}-x86_64.msi"
 
       - name: Upload .msi artifact
         uses: actions/upload-artifact@v4
