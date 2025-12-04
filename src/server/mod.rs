@@ -922,9 +922,13 @@ impl CentyDaemon for CentyDaemonService {
         let shutdown_tx = self.shutdown_tx.clone();
 
         // Spawn a task to handle the delayed shutdown
+        // Always wait a small amount of time to ensure the response is sent before shutting down
         tokio::spawn(async move {
             if delay > 0 {
                 tokio::time::sleep(tokio::time::Duration::from_secs(delay as u64)).await;
+            } else {
+                // Small delay to ensure the RPC response is fully sent before shutdown
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
             let _ = shutdown_tx.send(ShutdownSignal::Shutdown);
         });
@@ -965,9 +969,13 @@ impl CentyDaemon for CentyDaemonService {
         let shutdown_tx = self.shutdown_tx.clone();
 
         // Spawn a task to handle the delayed restart
+        // Always wait a small amount of time to ensure the response is sent before restarting
         tokio::spawn(async move {
             if delay > 0 {
                 tokio::time::sleep(tokio::time::Duration::from_secs(delay as u64)).await;
+            } else {
+                // Small delay to ensure the RPC response is fully sent before restart
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
 
             // Spawn a new daemon process before shutting down
