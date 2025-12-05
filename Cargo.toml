@@ -1,6 +1,6 @@
 [package]
 name = "centy-daemon"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Daemon service for Centy - a local-first issue and documentation tracker"
 authors = ["Centy Team"]
