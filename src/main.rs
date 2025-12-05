@@ -96,6 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_v1()?;
 
     // Configure CORS for gRPC-Web
+    // Always allow *.centy.io origins, plus any configured origins
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(move |origin, _| {
             if allow_all_origins {
@@ -103,6 +104,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if let Ok(origin_str) = origin.to_str() {
+                // Always allow *.centy.io
+                if origin_str.ends_with(".centy.io")
+                    || origin_str == "https://centy.io"
+                    || origin_str == "http://centy.io"
+                {
+                    return true;
+                }
+
+                // Check configured origins
                 cors_origins
                     .iter()
                     .any(|allowed| origin_str.starts_with(allowed))

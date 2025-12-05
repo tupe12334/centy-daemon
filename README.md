@@ -29,21 +29,18 @@ cargo build --release
 ### Start the daemon
 
 ```bash
-# Default: binds to 127.0.0.1:50051 with localhost CORS origins
+# Default: binds to 127.0.0.1:50051
+# Automatically allows *.centy.io and localhost origins
 centy-daemon
 
 # Custom address
 centy-daemon --addr 127.0.0.1:50052
 
-# Allow CORS from the online web app
-centy-daemon --cors-origins=https://app.centy.io
-
-# Allow multiple CORS origins
-centy-daemon --cors-origins=https://app.centy.io,http://localhost:5180
+# Allow additional CORS origins
+centy-daemon --cors-origins=http://localhost:5180
 
 # Using environment variables
 CENTY_DAEMON_ADDR=127.0.0.1:50052 centy-daemon
-CENTY_CORS_ORIGINS=https://app.centy.io centy-daemon
 ```
 
 ### CLI Options
@@ -61,12 +58,16 @@ The daemon supports both **native gRPC** (HTTP/2) and **gRPC-Web** (HTTP/1.1), m
 
 ### CORS Configuration
 
-By default, the daemon allows CORS requests from localhost origins (`http://localhost`, `https://localhost`, `http://127.0.0.1`, `https://127.0.0.1`).
+The daemon always allows CORS requests from:
+- All `*.centy.io` subdomains (e.g., `https://app.centy.io`)
+- Localhost origins (`http://localhost`, `https://localhost`, `http://127.0.0.1`, `https://127.0.0.1`)
 
-To allow the hosted web app at [app.centy.io](https://app.centy.io) to connect:
+This means the hosted web app at [app.centy.io](https://app.centy.io) works out of the box with no additional configuration.
+
+To allow additional custom origins, use the `--cors-origins` flag:
 
 ```bash
-centy-daemon --cors-origins=https://app.centy.io
+centy-daemon --cors-origins=http://localhost:5180,https://myapp.example.com
 ```
 
 Use `*` to allow all origins (not recommended for production):
