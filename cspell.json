@@ -1,5 +1,8 @@
 {
   "version": "0.2",
+  "ignorePaths": [
+    "**/pnpm-lock.yaml"
+  ],
   "words": [
     "aarch64",
     "adoc",
@@ -25,6 +28,7 @@
     "msvideo",
     "nocapture",
     "NOFILE",
+    "oneofs",
     "parseable",
     "prerelease",
     "println",
