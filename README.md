@@ -105,6 +105,52 @@ grpcui -plaintext 127.0.0.1:50051
 
 This opens a browser with an interactive interface to call any RPC method.
 
+## E2E Tests
+
+The `e2e/` directory contains end-to-end tests for the gRPC API using Node.js and Vitest.
+
+### Prerequisites
+
+- Node.js >= 20.0.0
+- pnpm 10.24.0
+- Running daemon (build with `cargo build --release`)
+
+### Running E2E Tests
+
+```bash
+# Install dependencies
+cd e2e
+pnpm install
+
+# Build the daemon (if not already built)
+pnpm daemon:build
+
+# Start the daemon in another terminal
+pnpm daemon:start
+
+# Run tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+```
+
+### Test Structure
+
+```
+e2e/
+├── fixtures/
+│   ├── grpc-client.ts      # gRPC client wrapper
+│   ├── temp-project.ts     # Temp project helpers
+│   └── daemon-manager.ts   # Daemon lifecycle management
+├── daemon.e2e.spec.ts      # Daemon control tests
+├── init.e2e.spec.ts        # Project initialization tests
+├── issues.e2e.spec.ts      # Issue CRUD tests
+├── docs.e2e.spec.ts        # Documentation CRUD tests
+├── assets.e2e.spec.ts      # Asset management tests
+└── config.e2e.spec.ts      # Configuration tests
+```
+
 ## Project Structure
 
 ```
